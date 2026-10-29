@@ -105,6 +105,19 @@ export const FontPicker: React.FC<FontPickerProps> = ({ catalog, value, sampleTe
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Escape closes the picker wherever focus is: on a phone it is often on the body, not in the panel.
+  const close = useRef(onClose);
+  close.current = onClose;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      close.current();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   const pick = (f: FontFamily) => {
     pushRecentFont(f.family);
     onPick(f);
@@ -130,12 +143,6 @@ export const FontPicker: React.FC<FontPickerProps> = ({ catalog, value, sampleTe
   return createPortal(
     <div
       className={`font-picker${phone ? ' font-picker-sheet' : ''}`}
-      onKeyDown={(e) => {
-        if (e.key === 'Escape') {
-          e.stopPropagation();
-          onClose();
-        }
-      }}
     >
       <div className="font-picker-backdrop" onClick={onClose} aria-hidden="true" />
       <div className="font-picker-panel" role="dialog" aria-modal="true" aria-label="Choose a font">

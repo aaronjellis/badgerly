@@ -12,7 +12,7 @@ import type { Guides } from '../engine/snapping';
 import { capHeightPx, TEXT_RENDER_SIZE_PX } from '../engine/textOutline';
 import type { Action } from '../state/reducer';
 import { STAGE_ACCENT_HEX } from './stageColors';
-import { addPairEm, alongText, fallbackFontMm, fallbackInk, kerningDeltaEm, kerningHandles, pieceSlots, round2, scaleFactor, textLines } from './stageMath';
+import { addPairEm, alongText, anchoredCenter, fallbackFontMm, fallbackInk, kerningDeltaEm, kerningHandles, pieceSlots, round2, scaleFactor, textLines } from './stageMath';
 import { useMediaQuery } from './useMediaQuery';
 
 /** The badge's face on the stage: a step lighter than the stage, so the outline reads against it. */
@@ -111,6 +111,13 @@ export const Stage2D: React.FC<Stage2DProps> = ({ project, resolved, selectedId,
   const wrapperRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const dragRef = useRef<Drag | null>(null);
+  /**
+   * During a kerning drag, where the text's leading ink edge was when the drag began: after each re-resolve the
+   * element's center moves so that edge stays put, whatever the alignment.
+   */
+  const anchorRef = useRef<{ id: string; center0: Pt; startOffset: number } | null>(null);
+  /** The selected text as the last layout saw it, so a one-step change of its pairs (a key press, Reset kerning) can hold the same edge. */
+  const seenRef = useRef<{ id: string; pairs: string; center: Pt; offset: number } | null>(null);
 
   const stacked = project.mode === 'laser' && project.laserVariant === 'stacked';
   const layout = stacked && showLayout;
@@ -184,6 +191,8 @@ export const Stage2D: React.FC<Stage2DProps> = ({ project, resolved, selectedId,
     const onKey = (e: KeyboardEvent) => {
       const L = live.current;
       if (!L.selectedId || L.layout || e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
+      // A modal dialog (the font picker) owns the keys, wherever focus has landed.
+      if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
       const t = e.target;
       const inStage = t instanceof Node && !!wrapperRef.current?.contains(t);
       const idle = t === document.body || t === document.documentElement || t === null;
@@ -267,6 +276,8 @@ export const Stage2D: React.FC<Stage2DProps> = ({ project, resolved, selectedId,
       pair0: el.text.pairAdjustEm[key],
       outlineCapPx: capHeightPx(set[0], TEXT_RENDER_SIZE_PX),
     };
+    const ink = resolvedById.get(el.id)?.ink;
+    anchorRef.current = ink ? { id: el.id, center0: { x: el.x, y: el.y }, startOffset: ink.x - el.x } : null;
   };
 
   /** Left and Right on a focused handle step its pair by 0.01 em; the stage's own keys stay out of it. */
@@ -338,6 +349,7 @@ export const Stage2D: React.FC<Stage2DProps> = ({ project, resolved, selectedId,
   const endDrag = (e: React.PointerEvent) => {
     const d = dragRef.current;
     dragRef.current = null;
+    if (d?.kind === 'kern') anchorRef.current = null;
     setHits(null);
     // A press on the background that never became a pan is a click: it deselects.
     if (d?.kind === 'pan' && !d.moved && e.type === 'pointerup') onSelect(null);
@@ -358,6 +370,31 @@ export const Stage2D: React.FC<Stage2DProps> = ({ project, resolved, selectedId,
     () => new Set(resolved.warnings.filter((w) => w.code === 'fontLoading' && w.elementId).map((w) => w.elementId)),
     [resolved]
   );
+
+  // A letter pair changed the text's width: slide the element so its leading ink edge stays where it was, before paint.
+  // A drag holds the edge from where the drag began; any other change of the pairs holds it from the last layout.
+  useLayoutEffect(() => {
+    const drag = anchorRef.current;
+    const el = project.elements.find((x) => x.id === (drag?.id ?? selectedId));
+    const ink = el ? resolvedById.get(el.id)?.ink : undefined;
+    if (el?.kind !== 'text' || !ink) {
+      seenRef.current = null;
+      return;
+    }
+    const offset = ink.x - el.x;
+    const pairs = JSON.stringify(el.text.pairAdjustEm);
+    const seen = seenRef.current;
+    const from = drag
+      ? { center0: drag.center0, startOffset: drag.startOffset }
+      : seen && seen.id === el.id && seen.pairs !== pairs
+        ? { center0: seen.center, startOffset: seen.offset }
+        : null;
+    seenRef.current = { id: el.id, pairs, center: { x: el.x, y: el.y }, offset };
+    if (!from) return;
+    const c = anchoredCenter(from.center0, from.startOffset, offset, el.rotationDeg);
+    if (c.x !== el.x || c.y !== el.y) dispatch({ type: 'updateElement', id: el.id, patch: { x: c.x, y: c.y } });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resolved]);
 
   /** Where an element can be hit and selected: its ink box, or a guess at one for text still loading. */
   const inkOf = (el: BadgeElement): Rect | null => resolvedById.get(el.id)?.ink ?? (el.kind === 'text' ? fallbackInk(el) : null);
@@ -574,8 +611,7 @@ export const Stage2D: React.FC<Stage2DProps> = ({ project, resolved, selectedId,
 
             {selected?.kind === 'text' &&
               kernHandles.map((h) => {
-                const [line, index] = h.key.split(':').map(Number);
-                const next = Array.from(textLines(selected)[line]?.slice(index + 1) ?? '')[0] ?? '';
+                const next = Array.from(textLines(selected)[h.line]?.slice(h.index) ?? '')[0] ?? '';
                 const value = selected.text.pairAdjustEm[h.key] ?? 0;
                 return (
                   <g
@@ -585,8 +621,8 @@ export const Stage2D: React.FC<Stage2DProps> = ({ project, resolved, selectedId,
                     tabIndex={0}
                     aria-label={`Space before ${next ? `“${next}”` : 'letter'}`}
                     aria-orientation="horizontal"
-                    aria-valuemin={-1}
-                    aria-valuemax={1}
+                    aria-valuemin={-10}
+                    aria-valuemax={10}
                     aria-valuenow={value}
                     aria-valuetext={`${value.toFixed(2)} em`}
                     onPointerDown={(e) => startKern(e, selected, h.key)}

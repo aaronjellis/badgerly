@@ -83,6 +83,9 @@ export const addPairEm = (current: number | undefined, deltaEm: number): number 
 export interface KerningHandle {
   /** The `pairAdjustEm` key this handle edits: the line and the index where the pair starts. */
   key: string;
+  /** The line, and the index in it of the cluster the handle sits on (the one it moves). */
+  line: number;
+  index: number;
   x: number;
   y: number;
 }
@@ -95,7 +98,18 @@ export function kerningHandles(clusters: { line: number; index: number; x: numbe
   const handles: KerningHandle[] = [];
   clusters.forEach((c, i) => {
     const prev = clusters[i - 1];
-    if (prev && prev.line === c.line) handles.push({ key: `${c.line}:${prev.index}`, x: c.x, y: c.y });
+    if (prev && prev.line === c.line) handles.push({ key: `${c.line}:${prev.index}`, line: c.line, index: c.index, x: c.x, y: c.y });
   });
   return handles;
+}
+
+/**
+ * Where an element's center goes so the leading edge of its ink stays put while its width changes. The ink box is
+ * centered on the element, so its leading edge sits `offset` (-width / 2) from the center along the text, which runs
+ * `rotationDeg` from the x axis. `startOffset` is the offset when the edge was recorded at `center0`.
+ */
+export function anchoredCenter(center0: { x: number; y: number }, startOffset: number, offset: number, rotationDeg: number): { x: number; y: number } {
+  const a = (rotationDeg * Math.PI) / 180;
+  const shift = startOffset - offset;
+  return { x: round2(center0.x + shift * Math.cos(a)), y: round2(center0.y + shift * Math.sin(a)) };
 }

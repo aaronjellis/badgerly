@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addPairEm, alongText, fallbackInk, kerningDeltaEm, kerningHandles, pieceSlots, round2, scaleFactor } from '../src/ui/stageMath';
+import { addPairEm, alongText, anchoredCenter, fallbackInk, kerningDeltaEm, kerningHandles, pieceSlots, round2, scaleFactor } from '../src/ui/stageMath';
 import { defaultProject } from '../src/engine/model';
 import type { TextElement } from '../src/engine/model';
 
@@ -77,9 +77,9 @@ describe('kerningHandles', () => {
 
   it('skips each line\'s first cluster and keys a handle by the pair it widens', () => {
     expect(kerningHandles(clusters)).toEqual([
-      { key: '0:0', x: 2, y: 5 },
-      { key: '0:1', x: 3, y: 5 },
-      { key: '1:0', x: 2.5, y: 9 },
+      { key: '0:0', line: 0, index: 1, x: 2, y: 5 },
+      { key: '0:1', line: 0, index: 2, x: 3, y: 5 },
+      { key: '1:0', line: 1, index: 1, x: 2.5, y: 9 },
     ]);
   });
 
@@ -88,7 +88,7 @@ describe('kerningHandles', () => {
       { line: 0, index: 0, x: 0, y: 0 },
       { line: 0, index: 2, x: 4, y: 0 },
     ];
-    expect(kerningHandles(lig)).toEqual([{ key: '0:0', x: 4, y: 0 }]);
+    expect(kerningHandles(lig)).toEqual([{ key: '0:0', line: 0, index: 2, x: 4, y: 0 }]);
   });
 });
 
@@ -104,5 +104,34 @@ describe('round2', () => {
   it('rounds to the hundredth', () => {
     expect(round2(0.1 + 0.2)).toBe(0.3);
     expect(round2(7.620000000001)).toBe(7.62);
+  });
+});
+
+describe('anchoredCenter', () => {
+  // The ink box is centered on the element, so its leading edge sits `offset` (= -width / 2) from the center along the text.
+  const leadingEdge = (c: { x: number; y: number }, offset: number, deg: number) => ({
+    x: c.x + offset * Math.cos((deg * Math.PI) / 180),
+    y: c.y + offset * Math.sin((deg * Math.PI) / 180),
+  });
+
+  it('moves the center by the whole change of offset, not half of the width change', () => {
+    // The text grew 10 mm wider: its leading edge offset went from -20 to -25.
+    expect(anchoredCenter({ x: 10, y: 5 }, -20, -25, 0)).toEqual({ x: 15, y: 5 });
+  });
+
+  it('keeps the leading edge where it was for any rotation', () => {
+    for (const deg of [0, 30, 90, 180, -45]) {
+      const c0 = { x: 12.34, y: -7.5 };
+      const c1 = anchoredCenter(c0, -20, -26.37, deg);
+      const a = leadingEdge(c0, -20, deg);
+      const b = leadingEdge(c1, -26.37, deg);
+      expect(b.x).toBeCloseTo(a.x, 1);
+      expect(b.y).toBeCloseTo(a.y, 1);
+    }
+  });
+
+  it('rounds to the hundredth of a mm and leaves a text that did not change alone', () => {
+    expect(anchoredCenter({ x: 1, y: 2 }, -20, -20.123456, 0)).toEqual({ x: 1.12, y: 2 });
+    expect(anchoredCenter({ x: 1, y: 2 }, -20, -20, 33)).toEqual({ x: 1, y: 2 });
   });
 });

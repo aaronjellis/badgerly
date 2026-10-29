@@ -9,6 +9,7 @@ import { BACKING_ID, DEFAULT_ROLE, newId } from '../../engine/model';
 import type { BadgeElement, ElementRole, GraphicElement, TextElement } from '../../engine/model';
 import { DEFAULT_TEXT } from '../../engine/textOutline';
 import { Field, Segmented, Switch } from '../Field';
+import { round2 } from '../stageMath';
 import { FontPicker } from '../FontPicker';
 import { roleLabel } from './elementRole';
 import { readGraphicFile } from './graphicFile';
@@ -143,7 +144,7 @@ export const ElementsSection: React.FC<SectionProps> = ({ project, dispatch, sel
         ariaLabel={label}
         onChangeMm={(v) => {
           const k = v / el[key];
-          patch({ widthMm: el.widthMm * k, heightMm: el.heightMm * k });
+          patch({ widthMm: round2(el.widthMm * k), heightMm: round2(el.heightMm * k) });
         }}
       />
     </Field>
