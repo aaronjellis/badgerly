@@ -16,8 +16,10 @@ describe('shortcutFor', () => {
     expect(press('z')).toBeNull();
   });
   it('fires from fields too, since the chords do not type text', () => {
-    // The event's target is not part of the decision.
-    expect(shortcutFor({ key: 's', metaKey: true, ctrlKey: false, altKey: false, shiftKey: false })).toBe('save');
+    for (const target of [{ tagName: 'INPUT' }, { tagName: 'TEXTAREA' }, { tagName: 'SELECT' }, { tagName: 'DIV', isContentEditable: true }]) {
+      expect(press('s', { target })).toBe('save');
+      expect(press('e', { target })).toBe('export');
+    }
   });
   it('ignores the repeats of a held key', () => {
     expect(press('s', { repeat: true })).toBeNull();

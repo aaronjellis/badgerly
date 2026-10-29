@@ -11,6 +11,8 @@ interface KeyLike {
   altKey: boolean;
   shiftKey: boolean;
   repeat?: boolean;
+  /** Where the key went. It does not matter: the chords fire from fields too. */
+  target?: EventTarget | { tagName?: string; isContentEditable?: boolean } | null;
 }
 
 /** The command a key press asks for: ⌘ or Ctrl with S, O or E, from anywhere (none types text), and not a held key's repeats. */
@@ -27,7 +29,7 @@ export function useShortcuts(handlers: Record<Shortcut, () => void>): void {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       // A held chord still belongs to the app, so the browser's own never opens; only the first press runs.
-      const shortcut = shortcutFor({ key: e.key, metaKey: e.metaKey, ctrlKey: e.ctrlKey, altKey: e.altKey, shiftKey: e.shiftKey });
+      const shortcut = shortcutFor({ key: e.key, metaKey: e.metaKey, ctrlKey: e.ctrlKey, altKey: e.altKey, shiftKey: e.shiftKey, target: e.target });
       if (!shortcut) return;
       e.preventDefault();
       if (!e.repeat) latest.current[shortcut]();
