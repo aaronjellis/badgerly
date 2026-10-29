@@ -1,0 +1,16 @@
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import { App } from './App';
+import '@fontsource-variable/figtree';
+import '@fontsource-variable/bricolage-grotesque';
+import './ui/tokens.css';
+import './ui/app.css';
+import './ui/controls.css';
+import './ui/viewport2d.css';
+import './ui/phone.css';
+
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);
