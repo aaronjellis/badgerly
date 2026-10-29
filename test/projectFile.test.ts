@@ -107,6 +107,11 @@ describe('projectFile', () => {
     expect(parseProject(serializeProject(p)).border).toEqual(p.border);
   });
 
+  it('clamps a shallow border inset on a scallop badge when the file opens', () => {
+    const p = parse({ shape: { kind: 'scallop', scallopMm: 4 }, border: { insetMm: 1 } });
+    expect(p.border.insetMm).toBe(4);
+  });
+
   it('drops a corner motif that is not a string', () => {
     expect(parse({ border: { motifSvg: 7 } }).border.motifSvg).toBeUndefined();
   });

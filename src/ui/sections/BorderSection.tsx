@@ -6,6 +6,7 @@ import type { BorderConfig, BorderStyle } from '../../engine/border';
 import { CORNER_MOTIFS, motifPoly } from '../../engine/cornerArt';
 import { polyToSvgPath } from '../../engine/geom';
 import { Field, Segmented } from '../Field';
+import { readMotifFile } from './motifFile';
 import { unitHelpers } from './shared';
 import type { SectionProps } from './types';
 
@@ -34,13 +35,6 @@ const MotifIcon: React.FC<{ d: string }> = ({ d }) => (
     <path d={d} />
   </svg>
 );
-
-/** Why a picked file is not a corner motif, or null when it is one. */
-function motifProblem(text: string): string | null {
-  if (!/<svg[\s>]/i.test(text)) return 'That file is not an SVG.';
-  if (motifPoly(text, 10, 0.1).length === 0) return 'That SVG has no filled shapes to use.';
-  return null;
-}
 
 /** The border style and its sizes; in 3D, whether the line is raised or sunk and how far. */
 export const BorderSection: React.FC<SectionProps> = ({ project, dispatch, resolved }) => {
@@ -72,10 +66,9 @@ export const BorderSection: React.FC<SectionProps> = ({ project, dispatch, resol
 
   const upload = async (file: File | undefined) => {
     if (!file) return;
-    const text = await file.text();
-    const problem = motifProblem(text);
-    setUploadError(problem);
-    if (!problem) setBorder({ motifSvg: text, motifId: CUSTOM_MOTIF_ID });
+    const read = await readMotifFile(file);
+    setUploadError('error' in read ? read.error : null);
+    if ('svg' in read) setBorder({ motifSvg: read.svg, motifId: CUSTOM_MOTIF_ID });
   };
 
   const field = (

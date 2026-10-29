@@ -1,4 +1,4 @@
-import { DEFAULT_BORDER } from './border';
+import { clampBorder, DEFAULT_BORDER } from './border';
 import type { BorderConfig, BorderStyle } from './border';
 import { BACKING_ID, DEFAULT_RELIEF, DEFAULT_ROLE, defaultBackingLayer, defaultLayers, defaultProject } from './model';
 import type { BadgeElement, BadgeProject, ElementRole, Layer, ReliefConfig } from './model';
@@ -165,14 +165,15 @@ export function parseProject(text: string): BadgeProject {
     ? (raw.elements as unknown[]).flatMap((e) => parseElement(e, layerIds) ?? [])
     : defaults.elements;
 
+  const shape = parseShape(raw.shape);
   return {
     version: VERSION,
     name: isStr(raw.name) ? raw.name : defaults.name,
     unit: oneOf(raw.unit, ['mm', 'in'], defaults.unit),
     mode: oneOf(raw.mode, ['laser', 'print3d'], defaults.mode),
     laserVariant: oneOf(raw.laserVariant, ['single', 'stacked', 'printcut'], defaults.laserVariant),
-    shape: parseShape(raw.shape),
-    border: parseBorder(raw.border),
+    shape,
+    border: clampBorder(parseBorder(raw.border), shape),
     elements,
     layers,
     relief: parseRelief(raw.relief),
