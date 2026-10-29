@@ -1,7 +1,9 @@
 import React from 'react';
-import { Box, Download, Scissors } from 'lucide-react';
-import type { DisplayUnit, Mode } from '../engine/model';
+import { Box, Scissors } from 'lucide-react';
+import type { BadgeProject, DisplayUnit, Mode } from '../engine/model';
+import type { ExportFormatId } from '../state/exportFlow';
 import { BadgerMark } from './BadgerMark';
+import { ExportMenu } from './ExportMenu';
 import { Segmented } from './Field';
 import { ProjectMenu, type ProjectMenuProps } from './ProjectMenu';
 
@@ -11,12 +13,26 @@ interface AppBarProps {
   displayUnit: DisplayUnit;
   onSelectUnit: (unit: DisplayUnit) => void;
   projectMenu: ProjectMenuProps;
+  project: BadgeProject;
+  onExport: (id: ExportFormatId) => Promise<boolean>;
+  exportStatus: string | null;
+  exporting: boolean;
 }
 
 const ICON = { size: 18, strokeWidth: 1.75, 'aria-hidden': true } as const;
 
 /** Wordmark and Project menu, the mode switch (icons only on a narrow phone), units, and Export. */
-export const AppBar: React.FC<AppBarProps> = ({ mode, onSelectMode, displayUnit, onSelectUnit, projectMenu }) => (
+export const AppBar: React.FC<AppBarProps> = ({
+  mode,
+  onSelectMode,
+  displayUnit,
+  onSelectUnit,
+  projectMenu,
+  project,
+  onExport,
+  exportStatus,
+  exporting,
+}) => (
   <header className="app-bar">
     <div className="app-brand">
       <BadgerMark size={22} className="app-brand-icon" />
@@ -49,11 +65,7 @@ export const AppBar: React.FC<AppBarProps> = ({ mode, onSelectMode, displayUnit,
           ]}
         />
       </div>
-      {/* Task 20 replaces this with the Export menu. */}
-      <button type="button" className="btn-primary" disabled>
-        <Download {...ICON} />
-        <span>Export</span>
-      </button>
+      <ExportMenu project={project} onExport={onExport} status={exportStatus} busy={exporting} />
     </div>
   </header>
 );

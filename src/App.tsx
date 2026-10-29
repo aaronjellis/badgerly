@@ -1,14 +1,20 @@
 import React, { Suspense, lazy, useState } from 'react';
 import { useProject } from './state/useProject';
+import { exportFormats } from './state/exportFlow';
+import { useExport } from './state/useExport';
+import { useProjectFile } from './state/useProjectFile';
 import { useRelief } from './state/useRelief';
 import { AppBar } from './ui/AppBar';
+import { ErrorBoundary } from './ui/ErrorBoundary';
 import { Inspector } from './ui/Inspector';
 import { Stage2D } from './ui/Stage2D';
+import { Stage3DUnavailable } from './ui/Stage3DUnavailable';
 import { StageViewToggle } from './ui/StageViewToggle';
 import type { StageView } from './ui/StageViewToggle';
 import { partsLiftMm } from './ui/stage3dMath';
 import { partsForMode } from './ui/parts';
 import type { PartId } from './ui/parts';
+import { useShortcuts } from './ui/useShortcuts';
 
 /** three.js comes in with the 3D stage, the first time it shows. */
 const Stage3D = lazy(() => import('./ui/Stage3D').then((m) => ({ default: m.Stage3D })));
@@ -19,6 +25,8 @@ const COUNTERPART: Partial<Record<PartId, PartId>> = { layers: 'relief', relief:
 export function App() {
   const { project, dispatch, selectedId, setSelectedId, resolved, fonts } = useProject();
   const relief = useRelief(project, resolved);
+  const { status, setStatus, busy, exportAs } = useExport(project, fonts);
+  const file = useProjectFile({ project, dispatch, clearSelection: () => setSelectedId(null), setStatus });
   /** 3D print mode shows the 3D preview first, and keeps the choice for the session. */
   const [stageView, setStageView] = useState<StageView>('3d');
   const [settingQuery, setSettingQuery] = useState('');
@@ -55,6 +63,13 @@ export function App() {
 
   const viewToggle = <StageViewToggle value={stageView} onChange={setStageView} />;
 
+  useShortcuts({
+    save: file.onSave,
+    open: file.onOpen,
+    // A refusal has no menu open to show it, so the Export section opens to say why.
+    export: () => void exportAs(exportFormats(project)[0].id).then((ok) => ok || handleSelectPart('export')),
+  });
+
   return (
     <div className="app">
       <AppBar
@@ -62,19 +77,25 @@ export function App() {
         onSelectMode={(mode) => dispatch({ type: 'set', patch: { mode } })}
         displayUnit={project.unit}
         onSelectUnit={(unit) => dispatch({ type: 'set', patch: { unit } })}
-        // Task 20 wires Open and Save and tracks unsaved changes.
-        projectMenu={{ onNew: () => dispatch({ type: 'new' }), onOpen: () => {}, onSave: () => {}, unsaved: false }}
+        projectMenu={{ onNew: file.onNew, onOpen: file.onOpen, onSave: file.onSave, unsaved: file.unsaved }}
+        project={project}
+        onExport={exportAs}
+        exportStatus={status}
+        exporting={busy}
       />
+      <input ref={file.inputRef} type="file" accept=".badge,application/json" hidden onChange={file.onFileChosen} />
       <div className="app-body">
         {relief && stageView === '3d' ? (
-          <Suspense fallback={<div className="stage"><p className="stage3d-note" role="status">Loading 3D view</p></div>}>
-            <Stage3D
-              meshes={relief}
-              partsLiftMm={partsLiftMm(project.relief.plateMm, relief.clamped.recessMm ?? project.relief.recessMm)}
-              unit={project.unit}
-              viewToggle={viewToggle}
-            />
-          </Suspense>
+          <ErrorBoundary fallback={<Stage3DUnavailable viewToggle={viewToggle} />}>
+            <Suspense fallback={<div className="stage"><p className="stage3d-note" role="status">Loading 3D view</p></div>}>
+              <Stage3D
+                meshes={relief}
+                partsLiftMm={partsLiftMm(project.relief.plateMm, relief.clamped.recessMm ?? project.relief.recessMm)}
+                unit={project.unit}
+                viewToggle={viewToggle}
+              />
+            </Suspense>
+          </ErrorBoundary>
         ) : (
           <Stage2D project={project} resolved={resolved} selectedId={selectedId} onSelect={setSelectedId} dispatch={dispatch} unit={project.unit} fonts={fonts} adjustPairs={adjustPairs} viewToggle={relief ? viewToggle : undefined} />
         )}
@@ -88,6 +109,7 @@ export function App() {
           onTogglePart={handleTogglePart}
           scrollRequest={scrollRequest}
           sectionProps={{ project, dispatch, selectedId, setSelectedId, resolved, relief, fonts, adjustPairs, setAdjustPairs }}
+          exportControls={{ onExport: exportAs, status, busy }}
         />
       </div>
     </div>

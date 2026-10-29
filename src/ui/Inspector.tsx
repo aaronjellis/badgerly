@@ -8,6 +8,8 @@ import { Section } from './Section';
 import { BorderSection } from './sections/BorderSection';
 import { ElementsSection } from './sections/ElementsSection';
 import { LayersSection } from './sections/LayersSection';
+import { ExportSection } from './sections/ExportSection';
+import type { ExportControls } from './sections/ExportSection';
 import { ReliefSection } from './sections/ReliefSection';
 import { ShapeSection } from './sections/ShapeSection';
 import type { SectionProps } from './sections/types';
@@ -27,6 +29,8 @@ interface InspectorProps {
   /** Set on every chip click; `n` changes each time, so a repeat scrolls again. */
   scrollRequest: { id: PartId; n: number } | null;
   sectionProps: SectionProps;
+  /** What the Export section adds to the section props: the export action and how the last one went. */
+  exportControls: ExportControls;
 }
 
 const prefersReducedMotion = () =>
@@ -34,7 +38,7 @@ const prefersReducedMotion = () =>
 
 /**
  * The right panel: the laser variant (in laser mode), the settings search, the parts chips, and
- * one section per part, numbered as steps in the parts' order. The other section bodies arrive in later tasks.
+ * one section per part, numbered as steps in the parts' order.
  */
 export const Inspector: React.FC<InspectorProps> = ({
   settingQuery,
@@ -46,6 +50,7 @@ export const Inspector: React.FC<InspectorProps> = ({
   onTogglePart,
   scrollRequest,
   sectionProps,
+  exportControls,
 }) => {
   const asideRef = useRef<HTMLElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -135,6 +140,8 @@ export const Inspector: React.FC<InspectorProps> = ({
                 <LayersSection {...sectionProps} />
               ) : part.id === 'relief' ? (
                 <ReliefSection {...sectionProps} />
+              ) : part.id === 'export' ? (
+                <ExportSection {...sectionProps} {...exportControls} />
               ) : null}
             </Section>
           );

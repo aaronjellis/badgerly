@@ -1003,3 +1003,31 @@
   font-size: var(--fs-label);
   font-weight: var(--w-medium);
 }
+
+/* ---------- export section ---------- */
+
+.export-list {
+  display: grid;
+  gap: 0.5rem;
+}
+
+/* A format button: its name, and under it what the file holds. */
+.export-format {
+  justify-content: flex-start;
+  padding: 0.4rem 0.75rem;
+  text-align: left;
+}
+
+.export-format .pop-item-text {
+  flex: 1;
+}
+
+/* The last export's line, in the section and under the menu's formats. */
+.export-status {
+  margin: 0;
+  padding: 0.5rem 0.25rem 0;
+}
+
+.export-list + .export-status {
+  padding: 0;
+}
