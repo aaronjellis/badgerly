@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { exportLaserSvg, laserPieces } from '../src/engine/laserExport';
+import { area, bounds } from '../src/engine/geom';
 import { defaultProject, DEFAULT_ROLE, newId } from '../src/engine/model';
 import type { BadgeProject, GraphicElement } from '../src/engine/model';
 import { resolveBadge } from '../src/engine/resolve';
@@ -145,5 +146,102 @@ describe('exportLaserSvg', () => {
     expect(piece.cut).toHaveLength(1);
     expect(piece.print).toEqual([]);
     expect(piece.images).toEqual([]);
+  });
+  describe('stacked', () => {
+    /** A stacked default project whose text sits on the first top layer. */
+    function stacked(): BadgeProject {
+      const p = defaultProject(); p.laserVariant = 'stacked'; p.elements[0].role.layerId = p.layers[1].id;
+      return p;
+    }
+
+    it('a group per layer, top pieces scored on the backing and cut on their own layer', () => {
+      const p = stacked();
+      const r = resolve(p);
+      const pieces = laserPieces(p, r);
+      expect(pieces.map((x) => x.id)).toEqual(['backing', 'layer-acrylic']);
+      expect(pieces[0].score.length).toBeGreaterThan(1); // border plus letter outlines
+      expect(area(pieces[1].cut)).toBeCloseTo(area(r.elements[0].poly), 2);
+      const svg = exportLaserSvg(p, r);
+      expect(svg).toContain('id="layer-acrylic-cut"');
+      expect(svg).toContain('viewBox="0 0 ' + (103.6 + 5 + Math.ceil(r.elements[0].ink.w * 10) / 10).toFixed(1));
+    });
+
+    it('gives the top piece only a cut', () => {
+      const p = stacked();
+      const [, top] = laserPieces(p, resolve(p));
+      expect(top.score).toEqual([]);
+      expect(top.engrave).toEqual([]);
+      expect(top.print).toEqual([]);
+      expect(top.images).toEqual([]);
+    });
+
+    it('makes one piece per top layer in layer order, with unique slugs', () => {
+      const p = stacked();
+      p.layers.push({ id: newId(), name: 'Acrylic!', thicknessMm: 2 }, { id: newId(), name: '  Gold Mirror ', thicknessMm: 2 });
+      const second = { ...p.elements[0], id: newId(), role: { ...p.elements[0].role, layerId: p.layers[2].id } };
+      const third = { ...p.elements[0], id: newId(), role: { ...p.elements[0].role, layerId: p.layers[3].id } };
+      p.elements.push(second, third);
+      const pieces = laserPieces(p, resolve(p));
+      expect(pieces.map((x) => x.id)).toEqual(['backing', 'layer-acrylic', 'layer-acrylic-2', 'layer-gold-mirror']);
+      // Each of the three text copies is scored on the backing as its own set of outlines.
+      const r = resolve(p);
+      const outlines = r.elements.reduce((n, e) => n + e.poly.length, 0);
+      expect(pieces[0].score.length).toBe(r.border.centerlines.length + outlines);
+    });
+
+    it('skips a top layer that has no vector elements', () => {
+      const p = stacked();
+      p.layers.push({ id: newId(), name: 'Empty', thicknessMm: 2 }, { id: newId(), name: 'Photo', thicknessMm: 2 });
+      p.elements.push(raster({ role: { ...DEFAULT_ROLE, layerId: p.layers[3].id } }));
+      const pieces = laserPieces(p, resolve(p));
+      expect(pieces.map((x) => x.id)).toEqual(['backing', 'layer-acrylic']);
+      expect(pieces[0].images).toEqual([]);
+    });
+
+    it('keeps backing elements engraved on the backing piece', () => {
+      const p = stacked();
+      const logo = { ...p.elements[0], id: newId(), role: { ...p.elements[0].role, layerId: null } };
+      p.elements.push(logo);
+      const r = resolve(p);
+      const [backing] = laserPieces(p, r);
+      expect(area(backing.engrave)).toBeCloseTo(area(r.elements[1].poly), 1);
+      // The top text is scored, not engraved.
+      expect(backing.score.length).toBeGreaterThan(r.border.centerlines.length);
+    });
+
+    it('scores a backing score-role element and the top outlines as closed loops beside open border runs', () => {
+      const p = stacked(); p.border.style = 'dashed';
+      const r = resolve(p);
+      const [backing] = laserPieces(p, r);
+      expect(backing.scoreClosed).toBe(false);
+      for (const line of backing.score.slice(r.border.centerlines.length)) expect(line[line.length - 1]).toEqual(line[0]);
+    });
+
+    it('lays the top piece 5 mm right of the backing, matching each piece by element id', () => {
+      const p = stacked();
+      p.elements.unshift({ ...p.elements[0], id: newId(), role: { ...p.elements[0].role, layerId: null, laser: 'cutout' } });
+      const r = resolve(p);
+      // Reverse the resolved order: pieces must still find each element by id.
+      r.elements.reverse();
+      const svg = exportLaserSvg(p, r);
+      const rightEdge = (id: string) => {
+        const xs = [...pathIn(svg, id).matchAll(/(-?[\d.]+) (-?[\d.]+)/g)].map((m) => Number(m[1]));
+        return { min: Math.min(...xs), max: Math.max(...xs) };
+      };
+      const back = rightEdge('backing-cut');
+      const top = rightEdge('layer-acrylic-cut');
+      expect(back.min).toBeCloseTo(1, 3);
+      expect(top.min - back.max).toBeCloseTo(5, 3);
+      const topPiece = laserPieces(p, r)[1];
+      expect(bounds(topPiece.cut)!.w).toBeCloseTo(top.max - top.min, 3);
+    });
+
+    it('balances its group tags', () => {
+      const p = stacked();
+      const svg = exportLaserSvg(p, resolve(p));
+      expect(svg.match(/<g[\s>]/g)?.length).toBe(svg.match(/<\/g>/g)?.length);
+      expect(svg).toContain('<g id="backing">');
+      expect(svg).toContain('<g id="layer-acrylic">');
+    });
   });
 });

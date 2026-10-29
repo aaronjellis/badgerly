@@ -3,7 +3,8 @@
  * LightBurn reads cut, score, engrave and print as separate operations with no cleanup.
  *
  * `laserPieces` splits a project into pieces, each the geometry for one sheet of material;
- * `exportLaserSvg` writes the pieces out. Single material and print and cut make one piece.
+ * `exportLaserSvg` writes the pieces out. Single material and print and cut make one piece; stacked
+ * makes the backing plus one piece per top layer.
  */
 import { bounds, difference, polyToSvgPath, rotate, translate, union } from './geom';
 import type { Poly, Pt, Rect } from './geom';
@@ -17,6 +18,8 @@ export const ENGRAVE = '#000000';
 
 /** The margin around the layout, in mm. */
 const MARGIN_MM = 1;
+/** The gap between pieces laid side by side, in mm. */
+const GAP_MM = 5;
 /** Stroke width for cut and score lines, in mm: a hairline that laser software replaces with its own. */
 const STROKE_MM = 0.1;
 
@@ -38,13 +41,53 @@ function isPrinted(project: BadgeProject, el: BadgeElement): boolean {
   return project.laserVariant === 'printcut' && el.role.printColor && el.role.laser === 'engrave';
 }
 
-/** The pieces of a project. Single material and print and cut are one piece, the badge. */
+/** The pieces of a project. Single material and print and cut are one piece, the badge; stacked is one per layer. */
 export function laserPieces(project: BadgeProject, resolved: ResolvedBadge): SvgPiece[] {
-  // Task 12 adds the stacked variant, which makes one piece per layer; until then it is the single piece.
-  return [badgePiece(project, resolved)];
+  if (project.laserVariant === 'stacked') return stackedPieces(project, resolved);
+  return [badgePiece(project, resolved, 'badge', null, [])];
 }
 
-function badgePiece(project: BadgeProject, resolved: ResolvedBadge): SvgPiece {
+/** `layer-<slug of the name>`: lowercase, runs of other characters become one `-`, ends trimmed. */
+function layerSlug(name: string, fallback: number): string {
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return `layer-${slug || fallback}`;
+}
+
+/** The backing, with a score line where every top piece lands, then one cut-only piece per top layer that has any. */
+function stackedPieces(project: BadgeProject, resolved: ResolvedBadge): SvgPiece[] {
+  const byId = new Map(project.elements.map((el) => [el.id, el]));
+  const [, ...tops] = project.layers;
+  // An element on a layer that no longer exists stays on the backing rather than vanishing.
+  const topIds = new Set(tops.map((l) => l.id));
+  const layerOf = (id: string) => {
+    const layerId = byId.get(id)?.role.layerId;
+    return layerId && topIds.has(layerId) ? layerId : null;
+  };
+
+  const topPieces: SvgPiece[] = [];
+  const used = new Set(['backing']);
+  const landings: Pt[][] = [];
+  tops.forEach((layer, i) => {
+    const polys = resolved.elements.filter((r) => layerOf(r.id) === layer.id && r.poly.length > 0).map((r) => r.poly);
+    if (polys.length === 0) return;
+    landings.push(...polys.flat());
+    const base = layerSlug(layer.name, i + 1);
+    let id = base;
+    for (let n = 2; used.has(id); n++) id = `${base}-${n}`;
+    used.add(id);
+    // A lone element is already a clean outline; a union would only snap it to the clipper grid.
+    topPieces.push({ id, cut: polys.length === 1 ? polys[0] : union(polys), score: [], scoreClosed: true, engrave: [], print: [], images: [] });
+  });
+
+  const onBacking = new Set(resolved.elements.filter((r) => layerOf(r.id) === null).map((r) => r.id));
+  return [badgePiece(project, resolved, 'backing', onBacking, landings), ...topPieces];
+}
+
+/**
+ * One piece with the outline, border and the elements in `only` (all of them when null).
+ * `extraScore` are closed outlines scored on top of that, such as where a stacked top piece lands.
+ */
+function badgePiece(project: BadgeProject, resolved: ResolvedBadge, id: string, only: Set<string> | null, extraScore: Pt[][]): SvgPiece {
   const { border } = resolved;
   const byId = new Map(project.elements.map((el) => [el.id, el]));
 
@@ -56,7 +99,7 @@ function badgePiece(project: BadgeProject, resolved: ResolvedBadge): SvgPiece {
 
   for (const r of resolved.elements) {
     const el = byId.get(r.id);
-    if (!el) continue;
+    if (!el || (only && !only.has(r.id))) continue;
     if (r.raster) {
       // A raster has no outline to cut or score, so it is only ever engraved or printed.
       if (el.kind === 'graphic' && el.role.laser !== 'cutout') images.push({ el, box: r.ink });
@@ -77,10 +120,11 @@ function badgePiece(project: BadgeProject, resolved: ResolvedBadge): SvgPiece {
 
   const scoreClosed = borderLines.length === 0 || border.closedLines;
   // Lines are written open when any are open, so a closed contour repeats its first point to stay closed.
-  const elementLines = scoreClosed ? scoreContours : scoreContours.map((c) => (c.length > 0 ? [...c, c[0]] : c));
+  const closedLines = [...scoreContours, ...extraScore];
+  const elementLines = scoreClosed ? closedLines : closedLines.map((c) => (c.length > 0 ? [...c, c[0]] : c));
 
   return {
-    id: 'badge',
+    id,
     cut: cutouts.length > 0 ? difference(resolved.outline, union(cutouts)) : resolved.outline,
     score: [...borderLines, ...elementLines],
     scoreClosed,
@@ -150,20 +194,24 @@ function pieceGroup(project: BadgeProject, piece: SvgPiece, dx: number, dy: numb
 /** The SVG for the project's laser variant: 1:1 in mm, a 1 mm margin, one group per operation on each piece. */
 export function exportLaserSvg(project: BadgeProject, resolved: ResolvedBadge): string {
   const pieces = laserPieces(project, resolved);
-  // Pieces share one layout: its top-left lands at the margin, and its size sets the file's.
-  const rects = pieces.map(pieceBounds).filter((b): b is Rect => b !== null);
-  const layout: Rect = rects.length === 0
-    ? { x: 0, y: 0, w: 0, h: 0 }
-    : {
-        x: Math.min(...rects.map((b) => b.x)),
-        y: Math.min(...rects.map((b) => b.y)),
-        w: Math.max(...rects.map((b) => b.x + b.w)) - Math.min(...rects.map((b) => b.x)),
-        h: Math.max(...rects.map((b) => b.y + b.h)) - Math.min(...rects.map((b) => b.y)),
-      };
-  const dx = MARGIN_MM - layout.x;
-  const dy = MARGIN_MM - layout.y;
-  const w = ceilTenth(layout.w + 2 * MARGIN_MM).toFixed(1);
-  const h = ceilTenth(layout.h + 2 * MARGIN_MM).toFixed(1);
-  const body = pieces.map((piece) => pieceGroup(project, piece, dx, dy)).join('\n');
+  // Pieces sit left to right with a gap between their bounds. Each keeps its own badge coordinates and is
+  // shifted into its slot; they share one top edge, so the layout's top-left lands at the margin.
+  const rects = pieces.map(pieceBounds);
+  const top = Math.min(...rects.filter((b): b is Rect => b !== null).map((b) => b.y));
+  const dy = MARGIN_MM - top;
+  let cursor = MARGIN_MM;
+  const slots = rects.map((b) => {
+    if (!b) return 0;
+    const dx = cursor - b.x;
+    cursor += b.w + GAP_MM;
+    return dx;
+  });
+  const bottom = Math.max(...rects.filter((b): b is Rect => b !== null).map((b) => b.y + b.h));
+  const empty = rects.every((b) => b === null);
+  const width = empty ? 0 : cursor - GAP_MM - MARGIN_MM;
+  const height = empty ? 0 : bottom - top;
+  const w = ceilTenth(width + 2 * MARGIN_MM).toFixed(1);
+  const h = ceilTenth(height + 2 * MARGIN_MM).toFixed(1);
+  const body = pieces.map((piece, i) => pieceGroup(project, piece, slots[i], dy)).join('\n');
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}mm" height="${h}mm" viewBox="0 0 ${w} ${h}">\n${body}\n</svg>\n`;
 }
