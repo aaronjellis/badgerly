@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { area, bounds, contains, offset, outerCount, pathLength } from '../src/engine/geom';
 import type { Poly, Pt } from '../src/engine/geom';
 import { buildShape, DEFAULT_SHAPE } from '../src/engine/shapes';
-import { borderInsetFloor, buildBorder, clampBorder, dashPath, DEFAULT_BORDER, scoresBorder } from '../src/engine/border';
+import { borderInsetFloor, buildBorder, clampBorder, dashPath, DEFAULT_BORDER } from '../src/engine/border';
 import { CORNER_MOTIFS, motifPoly } from '../src/engine/cornerArt';
 
 const badge = buildShape({ ...DEFAULT_SHAPE, kind: 'rounded' }, 0.01);
@@ -214,17 +214,6 @@ describe('dashPath', () => {
   it('returns one dash when the loop is shorter than a pitch', () => {
     const tiny: Pt[] = [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }];
     expect(dashPath(tiny, 4, 2)).toHaveLength(1);
-  });
-});
-
-describe('scoresBorder', () => {
-  it('scores thin single, dashed, and corner borders only', () => {
-    expect(scoresBorder(DEFAULT_BORDER)).toBe(true);
-    expect(scoresBorder({ ...DEFAULT_BORDER, style: 'dashed' })).toBe(true);
-    expect(scoresBorder({ ...DEFAULT_BORDER, style: 'corners' })).toBe(true);
-    expect(scoresBorder({ ...DEFAULT_BORDER, style: 'double' })).toBe(false);
-    expect(scoresBorder({ ...DEFAULT_BORDER, style: 'none' })).toBe(false);
-    expect(scoresBorder({ ...DEFAULT_BORDER, widthMm: 0.51 })).toBe(false);
   });
 });
 

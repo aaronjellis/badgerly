@@ -26,23 +26,28 @@ function pathIn(svg: string, id: string): string {
 }
 
 describe('exportLaserSvg', () => {
-  it('single: the badge cut, the border score, the text engraved', () => {
+  it('single: the badge cut, the border a filled band in its own group, the text engraved', () => {
     const p = defaultProject();
     const svg = exportLaserSvg(p, resolve(p));
     expect(svg).toContain('viewBox="0 0 103.6 52.8"');
     expect(svg).toContain('width="103.6mm" height="52.8mm"');
     expect(svg).toMatch(/<g id="badge-cut">[\s\S]*stroke="#ff0000"/);
-    expect(svg).toMatch(/<g id="badge-score">[\s\S]*stroke="#0000ff"/);
+    expect(svg).not.toContain('id="badge-score"');
+    expect(svg).toMatch(/<g id="badge-border">\s*<path d="[^"]*" fill="#000000" fill-rule="evenodd"\/>/);
     expect(svg).toMatch(/<g id="badge-engrave">[\s\S]*fill="#000000"/);
     expect(svg).not.toContain('id="badge-print"');
+    // The band is a ring, its outer and inner contours, so engraving it fills the stroke and not the badge.
+    expect(pathIn(svg, 'badge-border').match(/M/g)).toHaveLength(2);
   });
 
-  it('a 1 mm border engraves instead of scoring', () => {
-    const p = defaultProject(); p.border.widthMm = 1;
-    const svg = exportLaserSvg(p, resolve(p));
-    expect(svg).not.toContain('id="badge-score"');
-    // The border band joins the text in the engrave group.
-    expect(svg).toContain('id="badge-engrave"');
+  it('keeps the border apart from the text at any width', () => {
+    for (const widthMm of [0.5, 1]) {
+      const p = defaultProject(); p.border.widthMm = widthMm;
+      const r = resolve(p);
+      const [piece] = laserPieces(p, r);
+      expect(area(piece.border)).toBeCloseTo(area(r.border.bands), 1);
+      expect(area(piece.engrave)).toBeCloseTo(area(r.elements[0].poly), 1);
+    }
   });
 
   it('a cut-out element leaves holes in the cut path', () => {
@@ -134,22 +139,22 @@ describe('exportLaserSvg', () => {
     expect(svg).toMatch(/<g id="badge-score">\s*<path d="M[^"]*Z" fill="none" stroke="#0000ff" stroke-width="0.1"\/>/);
   });
 
-  it('writes dashed border runs as open score lines', () => {
+  it('writes a dashed border as one filled band per dash', () => {
     const p = defaultProject(); p.border.style = 'dashed';
-    const pieces = laserPieces(p, resolve(p));
-    expect(pieces[0].scoreClosed).toBe(false);
-    const d = pathIn(exportLaserSvg(p, resolve(p)), 'badge-score');
-    expect(d).not.toContain('Z');
-    expect(d.match(/M/g)!.length).toBeGreaterThan(1);
+    const r = resolve(p);
+    const [piece] = laserPieces(p, r);
+    expect(piece.score).toEqual([]);
+    expect(piece.border).toHaveLength(r.border.centerlines.length);
+    const d = pathIn(exportLaserSvg(p, r), 'badge-border');
+    expect(d.match(/M/g)!.length).toBe(r.border.centerlines.length);
+    expect(d.match(/Z/g)!.length).toBe(r.border.centerlines.length);
   });
 
-  it('keeps a scored element closed next to open border runs', () => {
+  it('writes a score-role element as closed loops beside a dashed border', () => {
     const p = defaultProject(); p.border.style = 'dashed'; p.elements[0].role.laser = 'score';
-    const r = resolve(p);
-    const piece = laserPieces(p, r)[0];
-    const textLines = piece.score.slice(r.border.centerlines.length);
-    expect(textLines.length).toBeGreaterThan(0);
-    for (const line of textLines) expect(line[line.length - 1]).toEqual(line[0]);
+    const d = pathIn(exportLaserSvg(p, resolve(p)), 'badge-score');
+    expect(d.match(/M/g)!.length).toBeGreaterThan(0);
+    expect(d.match(/M/g)!.length).toBe(d.match(/Z/g)!.length);
   });
 
   it('makes one badge piece with a single cut contour and nothing printed', () => {
@@ -172,7 +177,9 @@ describe('exportLaserSvg', () => {
       const r = resolve(p);
       const pieces = laserPieces(p, r);
       expect(pieces.map((x) => x.id)).toEqual(['backing', 'layer-acrylic']);
-      expect(pieces[0].score.length).toBeGreaterThan(1); // border plus letter outlines
+      expect(pieces[0].score.length).toBe(r.elements[0].poly.length); // the letter outlines, where the top piece lands
+      expect(pieces[0].border.length).toBeGreaterThan(0);
+      expect(pieces[1].border).toEqual([]);
       expect(area(pieces[1].cut)).toBeCloseTo(area(r.elements[0].poly), 2);
       const svg = exportLaserSvg(p, r);
       expect(svg).toContain('id="layer-acrylic-cut"');
@@ -183,6 +190,7 @@ describe('exportLaserSvg', () => {
       const p = stacked();
       const [, top] = laserPieces(p, resolve(p));
       expect(top.score).toEqual([]);
+      expect(top.border).toEqual([]);
       expect(top.engrave).toEqual([]);
       expect(top.print).toEqual([]);
       expect(top.images).toEqual([]);
@@ -199,7 +207,7 @@ describe('exportLaserSvg', () => {
       // Each of the three text copies is scored on the backing as its own set of outlines.
       const r = resolve(p);
       const outlines = r.elements.reduce((n, e) => n + e.poly.length, 0);
-      expect(pieces[0].score.length).toBe(r.border.centerlines.length + outlines);
+      expect(pieces[0].score.length).toBe(outlines);
     });
 
     it('skips a top layer that has no vector elements', () => {
@@ -219,15 +227,7 @@ describe('exportLaserSvg', () => {
       const [backing] = laserPieces(p, r);
       expect(area(backing.engrave)).toBeCloseTo(area(r.elements[1].poly), 1);
       // The top text is scored, not engraved.
-      expect(backing.score.length).toBeGreaterThan(r.border.centerlines.length);
-    });
-
-    it('scores a backing score-role element and the top outlines as closed loops beside open border runs', () => {
-      const p = stacked(); p.border.style = 'dashed';
-      const r = resolve(p);
-      const [backing] = laserPieces(p, r);
-      expect(backing.scoreClosed).toBe(false);
-      for (const line of backing.score.slice(r.border.centerlines.length)) expect(line[line.length - 1]).toEqual(line[0]);
+      expect(backing.score.length).toBeGreaterThan(0);
     });
 
     it('lays the top piece 5 mm right of the backing, matching each piece by element id', () => {

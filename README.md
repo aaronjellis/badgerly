@@ -20,14 +20,14 @@ npm run build    # Typecheck and build to dist
 - **Text in any Google Font:** Pick from the full Google Fonts catalog in a visual picker that shows your own text in each family. Text is shaped with HarfBuzz and converted to outlines, so the laser and the printer get the same letters you see.
 - **Letter spacing and pair kerning:** Adjust tracking for a whole line, or kern a single pair of letters.
 - **Drag layout with snapping:** Drag text and graphics on the stage. Elements snap to the badge's center and edges and to the border's inner edge, and the arrow keys nudge a selection.
-- **Laser SVG:** Export a single-material, stacked, or print-and-cut layout in millimeters. Cut, score, engrave, and print are named groups, so xTool Studio or LightBurn reads each as its own operation.
+- **Laser SVG:** Export a single-material, stacked, or print-and-cut layout in millimeters. Cut, score, border, engrave, and print are named groups, so xTool Studio or LightBurn reads each as its own operation.
 - **3D STL:** Export a plate with a chamfered or filleted edge, with emboss (raised) or deboss (sunk) lettering and graphics.
 - **Multi-color split:** Split the badge into a plate and parts, with a recess and clearance for each part, and export both as STL files.
 - **Units:** Work in inches (the default) or millimeters. Warnings and clamps keep a design printable.
 
 ## Exports
 
-- **SVG** is a 1:1 file in millimeters. Cut lines are red, score lines are blue, and engraving is black. Stacked output has one piece for the backing and one for each top layer.
+- **SVG** is a 1:1 file in millimeters. Cut lines are red, score lines are blue, and the border and engraving are black filled shapes, the border in a group of its own so it can be set apart from the lettering. Stacked output has one piece for the backing and one for each top layer.
 - **STL** is one closed solid in millimeters. The multi-color split downloads two files, the plate and the parts. Your browser may ask you to allow both downloads.
 
 No design data leaves your browser. Network requests load fonts, analytics, and the feedback widget. The font catalog and files come from Fontsource, and the picker and stage previews load Google Fonts stylesheets.

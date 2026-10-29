@@ -1,7 +1,7 @@
 /**
- * The inset border. It is drawn on the stage, scored or engraved on the laser, and embossed on
- * the 3D version, so every style produces the same three things: filled `bands` at the border's
- * width, the `centerlines` to score, and the corner `ornaments`.
+ * The inset border. It is drawn on the stage, engraved on the laser, and embossed on the 3D
+ * version, so every style produces the same three things: filled `bands` at the border's width,
+ * the `centerlines` the bands follow, and the corner `ornaments`.
  */
 import { bounds, contains, difference, offset, offsetOpen, pathLength, union } from './geom';
 import type { Poly, Pt, Rect } from './geom';
@@ -60,7 +60,7 @@ export function borderInsetFloor(border: BorderConfig, shape: ShapeConfig, edgeM
 export interface BorderGeometry {
   /** Filled rings, dash bands, or run bands at `widthMm`: what gets engraved or raised. */
   bands: Poly;
-  /** The lines to score: closed contours when `closedLines`, open polylines otherwise. */
+  /** The middle line of each band: closed contours when `closedLines`, open polylines (dashes, corner runs) otherwise. */
   centerlines: Pt[][];
   closedLines: boolean;
   /** The four placed corner motifs; empty for every style but `corners`. */
@@ -69,16 +69,10 @@ export interface BorderGeometry {
   tooDeep: boolean;
 }
 
-/** The widest line a laser scores as a single pass; wider borders are engraved. */
-const MAX_SCORE_WIDTH_MM = 0.5;
 /** How far a corner run stops short of its motif, so the line never touches the art. */
 const MOTIF_CLEARANCE_MM = 1;
 /** A corner run shorter than this between two motifs is a speck, not a line, so it is left out. */
 const MIN_RUN_MM = 1;
-
-export function scoresBorder(border: BorderConfig): boolean {
-  return (border.style === 'single' || border.style === 'dashed' || border.style === 'corners') && border.widthMm <= MAX_SCORE_WIDTH_MM;
-}
 
 /** The ring `widthMm` wide whose middle is the outline pulled in by `insetMm`. */
 function ring(outline: Poly, insetMm: number, widthMm: number, tolMm: number): Poly {

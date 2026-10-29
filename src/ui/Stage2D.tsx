@@ -53,11 +53,11 @@ const rotation = (deg: number, cx: number, cy: number): string | undefined =>
 const sizeLabel = (w: number, h: number, unit: DisplayUnit) =>
   unit === 'in' ? `${(w / 25.4).toFixed(2)} × ${(h / 25.4).toFixed(2)} in` : `${w.toFixed(1)} × ${h.toFixed(1)} mm`;
 
-/** Score lines as `M…L…` subpaths; closed lines end in `Z`. */
-const linesPath = (lines: Pt[][], closed: boolean) =>
+/** Score lines as closed `M…L…Z` subpaths. */
+const linesPath = (lines: Pt[][]) =>
   lines
     .filter((l) => l.length > 1)
-    .map((l) => `M${l.map((p) => `${Number(p.x.toFixed(3))} ${Number(p.y.toFixed(3))}`).join('L')}${closed ? 'Z' : ''}`)
+    .map((l) => `M${l.map((p) => `${Number(p.x.toFixed(3))} ${Number(p.y.toFixed(3))}`).join('L')}Z`)
     .join('');
 
 /** An editing target is an input of some kind; the stage never takes its keys. */
@@ -592,8 +592,9 @@ export const Stage2D: React.FC<Stage2DProps> = ({ project, resolved, selectedId,
                   <path d={polyToSvgPath(piece.cut)} fill={BADGE_FILL} fillRule="evenodd" stroke={CUT} strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
                 )}
                 {piece.score.length > 0 && (
-                  <path d={linesPath(piece.score, piece.scoreClosed)} fill="none" stroke={SCORE_TINT} strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
+                  <path d={linesPath(piece.score)} fill="none" stroke={SCORE_TINT} strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
                 )}
+                {piece.border.length > 0 && <path d={polyToSvgPath(piece.border)} fill={INK} fillRule="evenodd" />}
                 {piece.engrave.length > 0 && <path d={polyToSvgPath(piece.engrave)} fill={INK} fillRule="evenodd" />}
                 {piece.print.map((p, n) => (
                   <path key={n} d={polyToSvgPath(p.poly)} fill={p.fill} fillRule="evenodd" />

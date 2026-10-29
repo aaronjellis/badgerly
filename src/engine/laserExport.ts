@@ -1,6 +1,9 @@
 /**
  * The laser SVG: a 1:1 file in mm with one named group per laser operation, so xTool Studio or
- * LightBurn reads cut, score, engrave and print as separate operations with no cleanup.
+ * LightBurn reads cut, score, border, engrave and print as separate operations with no cleanup. The
+ * border is written as filled bands (the stroke flattened to its outline), in a group of its own
+ * apart from the engraved elements, so it can be engraved as a shape: a scored centerline would
+ * fill the whole badge when set to engrave.
  *
  * `laserPieces` splits a project into pieces, each the geometry for one sheet of material;
  * `exportLaserSvg` writes the pieces out. Single material and print and cut make one piece; stacked
@@ -9,7 +12,6 @@
 import { bounds, difference, polyToSvgPath, rotate, translate, union } from './geom';
 import type { Poly, Pt, Rect } from './geom';
 import { svgTextFromDataUrl } from './artworkImage';
-import { scoresBorder } from './border';
 import type { BadgeElement, BadgeProject, GraphicElement, TextElement } from './model';
 import type { ResolvedBadge } from './resolve';
 import { inlineSvgArtwork } from './svgInline';
@@ -30,8 +32,9 @@ export interface SvgPiece {
   id: string;
   cut: Poly;
   score: Pt[][];
-  /** Whether every score line is a closed loop; an open line (a dash or a corner run) is not closed. */
-  scoreClosed: boolean;
+  /** The border's bands and corner ornaments, filled: engraved apart from the elements. */
+  border: Poly;
+  /** The engraved elements. */
   engrave: Poly;
   /** Printed elements: text in its fill, a vector graphic in its own colors, drawn in its ink `box`. */
   print: { el: GraphicElement | TextElement; poly: Poly; fill: string; box: Rect }[];
@@ -80,7 +83,7 @@ function stackedPieces(project: BadgeProject, resolved: ResolvedBadge): SvgPiece
     used.add(id);
     // A lone element can skip the union: resolve has already merged each element into one clean outline (text
     // through `mergeContours`, an SVG through `union(regions)`), so a union would only snap it to the Clipper grid.
-    topPieces.push({ id, cut: polys.length === 1 ? polys[0] : union(polys), score: [], scoreClosed: true, engrave: [], print: [], images: [] });
+    topPieces.push({ id, cut: polys.length === 1 ? polys[0] : union(polys), score: [], border: [], engrave: [], print: [], images: [] });
   });
 
   const onBacking = new Set(resolved.elements.filter((r) => layerOf(r.id) === null).map((r) => r.id));
@@ -116,22 +119,11 @@ function badgePiece(project: BadgeProject, resolved: ResolvedBadge, id: string, 
     else engraves.push(r.poly);
   }
 
-  // The border: scored as centerlines when it is thin enough, else engraved as bands. Ornaments are always engraved.
-  const borderScored = scoresBorder(project.border);
-  const borderLines = borderScored ? border.centerlines : [];
-  if (!borderScored) engraves.push(border.bands);
-  engraves.push(border.ornaments);
-
-  const scoreClosed = borderLines.length === 0 || border.closedLines;
-  // Lines are written open when any are open, so a closed contour repeats its first point to stay closed.
-  const closedLines = [...scoreContours, ...extraScore];
-  const elementLines = scoreClosed ? closedLines : closedLines.map((c) => (c.length > 0 ? [...c, c[0]] : c));
-
   return {
     id,
     cut: cutouts.length > 0 ? difference(resolved.outline, union(cutouts)) : resolved.outline,
-    score: [...borderLines, ...elementLines],
-    scoreClosed,
+    score: [...scoreContours, ...extraScore],
+    border: union([border.bands, border.ornaments].filter((p) => p.length > 0)),
     engrave: union(engraves.filter((p) => p.length > 0)),
     print,
     images,
@@ -141,11 +133,11 @@ function badgePiece(project: BadgeProject, resolved: ResolvedBadge, id: string, 
 /** A number with at most 3 decimals and no trailing zeros. */
 const num = (v: number) => String(Number(v.toFixed(3)));
 
-/** `M…` polylines, closed with `Z` when `closed`. */
-function linesToSvgPath(lines: Pt[][], closed: boolean): string {
+/** `M…Z` closed polylines. */
+function linesToSvgPath(lines: Pt[][]): string {
   return lines
     .filter((l) => l.length > 1)
-    .map((l) => `M${l.map((p) => `${num(p.x)} ${num(p.y)}`).join('L')}${closed ? 'Z' : ''}`)
+    .map((l) => `M${l.map((p) => `${num(p.x)} ${num(p.y)}`).join('L')}Z`)
     .join('');
 }
 
@@ -153,7 +145,7 @@ const escapeAttr = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;
 
 /** The area a piece's content covers, with every image box turned as it is drawn. */
 export function pieceBounds(piece: SvgPiece): Rect | null {
-  const polys: Poly[] = [piece.cut, piece.score, piece.engrave, ...piece.print.map((p) => p.poly)];
+  const polys: Poly[] = [piece.cut, piece.score, piece.border, piece.engrave, ...piece.print.map((p) => p.poly)];
   for (const { el, box } of piece.images) {
     const corners = [{ x: box.x, y: box.y }, { x: box.x + box.w, y: box.y }, { x: box.x + box.w, y: box.y + box.h }, { x: box.x, y: box.y + box.h }];
     polys.push(rotate([corners], el.rotationDeg, box.x + box.w / 2, box.y + box.h / 2));
@@ -183,7 +175,8 @@ function pieceGroup(project: BadgeProject, piece: SvgPiece, dx: number, dy: numb
   const engraved = piece.images.filter(({ el }) => !isPrinted(project, el));
 
   group('cut', piece.cut.length > 0 ? [stroke(polyToSvgPath(translate(piece.cut, dx, dy)), CUT)] : []);
-  group('score', piece.score.length > 0 ? [stroke(linesToSvgPath(translate(piece.score, dx, dy), piece.scoreClosed), SCORE)] : []);
+  group('score', piece.score.length > 0 ? [stroke(linesToSvgPath(translate(piece.score, dx, dy)), SCORE)] : []);
+  group('border', piece.border.length > 0 ? [fill(polyToSvgPath(translate(piece.border, dx, dy)), ENGRAVE)] : []);
   group('engrave', [
     ...(piece.engrave.length > 0 ? [fill(polyToSvgPath(translate(piece.engrave, dx, dy)), ENGRAVE)] : []),
     ...engraved.map(image),
