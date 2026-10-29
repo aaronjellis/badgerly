@@ -93,6 +93,7 @@
 .two-col-inputs {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
   gap: 0.75rem;
   min-width: 0;
 }
@@ -459,6 +460,50 @@
 
 .pattern-apply-all {
   justify-self: start;
+}
+
+/* ---------- shape picker ---------- */
+
+/* A tile per outline: the outline drawn at 40 × 24 px. The name sits in the field's hint. */
+.shape-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(4.25rem, 1fr));
+  gap: 0.375rem;
+}
+
+.shape-tile {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  padding: 0.5rem 0.25rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-control);
+  cursor: pointer;
+}
+
+.shape-tile:hover {
+  background: var(--sunken);
+}
+
+.shape-tile svg {
+  fill: var(--muted);
+}
+
+.shape-tile[aria-checked='true'] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.shape-tile[aria-checked='true'] svg {
+  fill: var(--accent);
+}
+
+/* A limit or problem noted under a field. */
+.field-warn,
+.helper-note.field-warn {
+  color: var(--danger);
+  font-weight: var(--w-medium);
 }
 
 /* ---------- artwork position ---------- */

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { area, bounds, contains, offset, outerCount, pathLength } from '../src/engine/geom';
 import type { Poly, Pt } from '../src/engine/geom';
 import { buildShape, DEFAULT_SHAPE } from '../src/engine/shapes';
-import { buildBorder, dashPath, DEFAULT_BORDER, scoresBorder } from '../src/engine/border';
+import { buildBorder, clampBorder, dashPath, DEFAULT_BORDER, scoresBorder } from '../src/engine/border';
 import { CORNER_MOTIFS, motifPoly } from '../src/engine/cornerArt';
 
 const badge = buildShape({ ...DEFAULT_SHAPE, kind: 'rounded' }, 0.01);
@@ -117,6 +117,46 @@ describe('buildBorder', () => {
     expect(g.bands).toHaveLength(0);
     expect(g.centerlines).toHaveLength(0);
     expect(g.ornaments).toHaveLength(0);
+  });
+});
+
+describe('custom corner motif', () => {
+  // A 30 × 30 unit square in the 100-unit motif box: at 10 mm it is a 3 × 3 mm square per corner.
+  const square = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path d="M0 0H30V30H0Z"/></svg>';
+
+  it('draws the uploaded SVG in place of the catalog motif', () => {
+    const corners = { ...DEFAULT_BORDER, style: 'corners' as const };
+    const custom = buildBorder(badge, { ...corners, motifSvg: square }, 0.01);
+    expect(outerCount(custom.ornaments)).toBe(4);
+    expect(area(custom.ornaments)).toBeCloseTo(4 * 9, 1);
+    expect(area(buildBorder(badge, corners, 0.01).ornaments)).not.toBeCloseTo(4 * 9, 0);
+  });
+
+  it('ignores the chip selection while a custom motif is set', () => {
+    const a = buildBorder(badge, { ...DEFAULT_BORDER, style: 'corners', motifId: 'custom', motifSvg: square }, 0.01);
+    const b = buildBorder(badge, { ...DEFAULT_BORDER, style: 'corners', motifId: 'deco-fan', motifSvg: square }, 0.01);
+    expect(area(a.ornaments)).toBeCloseTo(area(b.ornaments), 6);
+  });
+});
+
+describe('clampBorder', () => {
+  const rounded = DEFAULT_SHAPE;
+  const scallop = { ...DEFAULT_SHAPE, kind: 'scallop' as const, scallopMm: 5 };
+
+  it('keeps the line from crossing the badge edge', () => {
+    expect(clampBorder({ ...DEFAULT_BORDER, insetMm: 0.1, widthMm: 2 }, rounded).insetMm).toBe(1);
+  });
+
+  it('keeps a scallop badge inset at least one scallop deep', () => {
+    expect(clampBorder({ ...DEFAULT_BORDER, insetMm: 3 }, scallop).insetMm).toBe(5);
+  });
+
+  it('does not apply the scallop floor to other shapes', () => {
+    expect(clampBorder({ ...DEFAULT_BORDER, insetMm: 3 }, { ...scallop, kind: 'rounded' }).insetMm).toBe(3);
+  });
+
+  it('returns the border it was given when nothing is limited', () => {
+    expect(clampBorder(DEFAULT_BORDER, rounded)).toBe(DEFAULT_BORDER);
   });
 });
 

@@ -1,6 +1,7 @@
 /** The badge project's state: one reducer holds every edit, so the editor and its tests share the same rules. */
 import { BACKING_ID, defaultProject, newId } from '../engine/model';
 import type { BadgeElement, BadgeProject, Layer, ReliefConfig } from '../engine/model';
+import { clampBorder } from '../engine/border';
 import type { BorderConfig } from '../engine/border';
 import { clampShape } from '../engine/shapes';
 import type { ShapeConfig } from '../engine/shapes';
@@ -33,10 +34,13 @@ export function reduce(p: BadgeProject, a: Action): BadgeProject {
   switch (a.type) {
     case 'set':
       return { ...p, ...a.patch };
-    case 'setShape':
-      return { ...p, shape: clampShape({ ...p.shape, ...a.patch }) };
+    case 'setShape': {
+      // A new shape can move the scallop floor under the border's inset.
+      const shape = clampShape({ ...p.shape, ...a.patch });
+      return { ...p, shape, border: clampBorder(p.border, shape) };
+    }
     case 'setBorder':
-      return { ...p, border: { ...p.border, ...a.patch } };
+      return { ...p, border: clampBorder({ ...p.border, ...a.patch }, p.shape) };
     case 'setRelief':
       return { ...p, relief: { ...p.relief, ...a.patch } };
     case 'addElement': {

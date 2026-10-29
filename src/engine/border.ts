@@ -6,6 +6,7 @@
 import { bounds, contains, difference, offset, offsetOpen, pathLength, union } from './geom';
 import type { Poly, Pt, Rect } from './geom';
 import { CORNER_MOTIFS, motifPoly } from './cornerArt';
+import type { ShapeConfig } from './shapes';
 
 export type BorderStyle = 'none' | 'single' | 'double' | 'dashed' | 'corners';
 
@@ -18,7 +19,10 @@ export interface BorderConfig {
   gapMm: number;
   dashMm: number;
   dashGapMm: number;
+  /** The catalog motif, or any id (the editor uses `custom`) while `motifSvg` is set. */
   motifId: string;
+  /** An uploaded corner motif, an SVG document drawn for the top-left corner; it replaces the catalog motif. */
+  motifSvg?: string;
   motifSizeMm: number;
   relief: 'emboss' | 'deboss';
   reliefMm: number;
@@ -36,6 +40,21 @@ export const DEFAULT_BORDER: BorderConfig = {
   relief: 'emboss',
   reliefMm: 0.6,
 };
+
+/**
+ * Keeps the border line inside the badge: its middle sits at least half a line width from the
+ * edge, and on a scallop badge at least one scallop deep, since a shallower line breaks into pieces
+ * at the notches. Returns `border` itself when nothing needs limiting.
+ */
+export function clampBorder(border: BorderConfig, shape: ShapeConfig): BorderConfig {
+  const floor = borderInsetFloor(border, shape);
+  return border.insetMm >= floor ? border : { ...border, insetMm: floor };
+}
+
+/** The shallowest inset `clampBorder` allows for this line width and shape. */
+export function borderInsetFloor(border: BorderConfig, shape: ShapeConfig): number {
+  return Math.max(border.widthMm / 2, shape.kind === 'scallop' ? shape.scallopMm : 0);
+}
 
 export interface BorderGeometry {
   /** Filled rings, dash bands, or run bands at `widthMm`: what gets engraved or raised. */
@@ -203,9 +222,9 @@ function fitCorner(room: Poly, box: Rect, right: boolean, bottom: boolean, size:
 function placeMotifs(outline: Poly, center: Poly, border: BorderConfig, tolMm: number): { ornaments: Poly; squares: Rect[] } | null {
   const box = bounds(center);
   if (!box) return null;
-  const motif = CORNER_MOTIFS.find((m) => m.id === border.motifId) ?? CORNER_MOTIFS[0];
+  const motifSvg = border.motifSvg ?? (CORNER_MOTIFS.find((m) => m.id === border.motifId) ?? CORNER_MOTIFS[0]).svg;
   const size = border.motifSizeMm;
-  const art = motifPoly(motif.svg, size, tolMm);
+  const art = motifPoly(motifSvg, size, tolMm);
   const room = offset(outline, -border.insetMm / 2, tolMm);
   const placed: Poly[] = [];
   const squares: Rect[] = [];

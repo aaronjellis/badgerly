@@ -5,6 +5,8 @@ import { Segmented } from './Field';
 import type { PartDef, PartId } from './parts';
 import { PartsRow } from './PartsRow';
 import { Section } from './Section';
+import { BorderSection } from './sections/BorderSection';
+import { ShapeSection } from './sections/ShapeSection';
 import type { SectionProps } from './sections/types';
 
 interface InspectorProps {
@@ -29,7 +31,7 @@ const prefersReducedMotion = () =>
 
 /**
  * The right panel: the laser variant (in laser mode), the settings search, the parts chips, and
- * one section per part, numbered as steps in the parts' order. The section bodies arrive in later tasks.
+ * one section per part, numbered as steps in the parts' order. The other section bodies arrive in later tasks.
  */
 export const Inspector: React.FC<InspectorProps> = ({
   settingQuery,
@@ -120,7 +122,7 @@ export const Inspector: React.FC<InspectorProps> = ({
               next={!query && next ? { title: next.label, onGo: () => onSelectPart(next.id) } : undefined}
               last={!query && !next}
             >
-              {null}
+              {part.id === 'shape' ? <ShapeSection {...sectionProps} /> : part.id === 'border' ? <BorderSection {...sectionProps} /> : null}
             </Section>
           );
         })}

@@ -101,6 +101,16 @@ describe('projectFile', () => {
     expect(p.elements).toHaveLength(0);
   });
 
+  it('round-trips a custom corner motif', () => {
+    const svg = '<svg viewBox="0 0 100 100"><path d="M0 0H30V30H0Z"/></svg>';
+    const p = { ...defaultProject(), border: { ...DEFAULT_BORDER, style: 'corners' as const, motifId: 'custom', motifSvg: svg } };
+    expect(parseProject(serializeProject(p)).border).toEqual(p.border);
+  });
+
+  it('drops a corner motif that is not a string', () => {
+    expect(parse({ border: { motifSvg: 7 } }).border.motifSvg).toBeUndefined();
+  });
+
   it('falls back to the default border style when the style is invalid', () => {
     const p = parse({ border: { style: 'wiggly', widthMm: 2 } });
     expect(p.border.style).toBe(DEFAULT_BORDER.style);

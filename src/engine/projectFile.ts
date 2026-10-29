@@ -59,6 +59,7 @@ function parseBorder(raw: unknown): BorderConfig {
   const r = isRecord(raw) ? raw : {};
   border.style = oneOf(r.style, BORDER_STYLES, DEFAULT_BORDER.style);
   border.relief = oneOf(r.relief, ['emboss', 'deboss'], DEFAULT_BORDER.relief);
+  if (isStr(r.motifSvg)) border.motifSvg = r.motifSvg;
   return border;
 }
 

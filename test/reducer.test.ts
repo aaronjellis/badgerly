@@ -56,6 +56,16 @@ describe('reducer', () => {
     expect(r.relief).toEqual({ ...base.relief, plateMm: 5 });
   });
 
+  it('setBorder limits the inset to half the line width', () => {
+    const b = reduce(defaultProject(), { type: 'setBorder', patch: { insetMm: 0.2, widthMm: 3 } });
+    expect(b.border.insetMm).toBe(1.5);
+  });
+
+  it('setShape to a scallop raises a shallow inset to the scallop size', () => {
+    const p = reduce(defaultProject(), { type: 'setShape', patch: { kind: 'scallop', scallopMm: 6 } });
+    expect(p.border.insetMm).toBe(6);
+  });
+
   it('updateElement merges into one element only', () => {
     let p = reduce(defaultProject(), { type: 'addElement', element: graphic('g1') });
     p = reduce(p, { type: 'updateElement', id: 'g1', patch: { x: 7, name: 'Crest' } });
