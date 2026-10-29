@@ -2,14 +2,14 @@ import React, { useId } from 'react';
 import { ChevronDown, Download } from 'lucide-react';
 import type { BadgeProject } from '../engine/model';
 import { exportFormats } from '../state/exportFlow';
-import type { ExportFormatId } from '../state/exportFlow';
+import type { ExportFormatId, ExportResult } from '../state/exportFlow';
 import { FORMAT_ICON } from './exportIcons';
 import { Popover, usePopover } from './Popover';
 
 interface ExportMenuProps {
   project: BadgeProject;
-  /** Exports the badge; resolves to whether a file was downloaded. */
-  onExport: (id: ExportFormatId) => Promise<boolean>;
+  /** Exports the badge; resolves to how it ended. */
+  onExport: (id: ExportFormatId) => Promise<ExportResult>;
   /** The last refusal or success line. */
   status: string | null;
   /** An export is running. */
@@ -24,7 +24,7 @@ export const ExportMenu: React.FC<ExportMenuProps> = ({ project, onExport, statu
 
   // A refusal keeps the menu open, so its message shows where the click was.
   const download = async (id: ExportFormatId) => {
-    if (await onExport(id)) close();
+    if ((await onExport(id)) === 'downloaded') close();
   };
 
   return (

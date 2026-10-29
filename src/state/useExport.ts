@@ -4,7 +4,7 @@ import type { FontProvider } from '../engine/fontProvider';
 import type { BadgeProject } from '../engine/model';
 import { triggerDownload } from '../ui/download';
 import { exportBadge } from './exportFlow';
-import type { ExportFormatId, ExportIo } from './exportFlow';
+import type { ExportFormatId, ExportIo, ExportResult } from './exportFlow';
 
 const browserIo: ExportIo = {
   save: (file) => triggerDownload(file.blob, file.filename),
@@ -17,8 +17,8 @@ export interface ExportState {
   setStatus: (message: string | null) => void;
   /** An export is running (it waits for fonts); another click waits for it. */
   busy: boolean;
-  /** Exports the badge as it is when called. Resolves to whether a file was downloaded. */
-  exportAs: (id: ExportFormatId) => Promise<boolean>;
+  /** Exports the badge as it is when called. 'busy' means another export is running: nothing happens, and the status stays. */
+  exportAs: (id: ExportFormatId) => Promise<ExportResult>;
 }
 
 export function useExport(project: BadgeProject, fonts: FontProvider): ExportState {
@@ -31,13 +31,13 @@ export function useExport(project: BadgeProject, fonts: FontProvider): ExportSta
 
   const exportAs = useCallback(
     async (id: ExportFormatId) => {
-      if (running.current) return false;
+      if (running.current) return 'busy';
       running.current = true;
       setBusy(true);
       try {
         const outcome = await exportBadge(id, project, fonts, browserIo);
         setStatus(outcome.message);
-        return outcome.ok;
+        return outcome.ok ? 'downloaded' : 'refused';
       } finally {
         running.current = false;
         setBusy(false);

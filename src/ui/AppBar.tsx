@@ -1,7 +1,7 @@
 import React from 'react';
 import { Box, Scissors } from 'lucide-react';
 import type { BadgeProject, DisplayUnit, Mode } from '../engine/model';
-import type { ExportFormatId } from '../state/exportFlow';
+import type { ExportFormatId, ExportResult } from '../state/exportFlow';
 import { BadgerMark } from './BadgerMark';
 import { ExportMenu } from './ExportMenu';
 import { Segmented } from './Field';
@@ -14,7 +14,7 @@ interface AppBarProps {
   onSelectUnit: (unit: DisplayUnit) => void;
   projectMenu: ProjectMenuProps;
   project: BadgeProject;
-  onExport: (id: ExportFormatId) => Promise<boolean>;
+  onExport: (id: ExportFormatId) => Promise<ExportResult>;
   exportStatus: string | null;
   exporting: boolean;
 }

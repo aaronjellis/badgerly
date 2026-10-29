@@ -66,8 +66,8 @@ export function App() {
   useShortcuts({
     save: file.onSave,
     open: file.onOpen,
-    // A refusal has no menu open to show it, so the Export section opens to say why.
-    export: () => void exportAs(exportFormats(project)[0].id).then((ok) => ok || handleSelectPart('export')),
+    // A refusal has no menu open to show it, so the Export section opens to say why. A busy click does nothing.
+    export: () => void exportAs(exportFormats(project)[0].id).then((result) => result === 'refused' && handleSelectPart('export')),
   });
 
   return (

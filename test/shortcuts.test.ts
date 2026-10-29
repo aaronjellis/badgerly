@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { shortcutFor } from '../src/ui/useShortcuts';
 
 const press = (key: string, extra: Partial<Parameters<typeof shortcutFor>[0]> = {}) =>
-  shortcutFor({ key, metaKey: true, ctrlKey: false, altKey: false, shiftKey: false, target: { tagName: 'DIV' }, ...extra });
+  shortcutFor({ key, metaKey: true, ctrlKey: false, altKey: false, shiftKey: false, ...extra });
 
 describe('shortcutFor', () => {
   it('maps S, O and E with ⌘ or Ctrl', () => {
@@ -15,9 +15,12 @@ describe('shortcutFor', () => {
     expect(press('s', { altKey: true })).toBeNull();
     expect(press('z')).toBeNull();
   });
-  it('ignores events from fields', () => {
-    expect(press('s', { target: { tagName: 'INPUT' } })).toBeNull();
-    expect(press('s', { target: { tagName: 'TEXTAREA' } })).toBeNull();
-    expect(press('s', { target: { tagName: 'DIV', isContentEditable: true } })).toBeNull();
+  it('fires from fields too, since the chords do not type text', () => {
+    // The event's target is not part of the decision.
+    expect(shortcutFor({ key: 's', metaKey: true, ctrlKey: false, altKey: false, shiftKey: false })).toBe('save');
+  });
+  it('ignores the repeats of a held key', () => {
+    expect(press('s', { repeat: true })).toBeNull();
+    expect(press('s', { repeat: false })).toBe('save');
   });
 });

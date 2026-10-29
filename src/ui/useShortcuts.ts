@@ -3,7 +3,6 @@ import { useEffect, useRef } from 'react';
 export type Shortcut = 'save' | 'open' | 'export';
 
 const KEYS: Record<string, Shortcut> = { s: 'save', o: 'open', e: 'export' };
-const TEXT_TAGS = new Set(['INPUT', 'TEXTAREA', 'SELECT']);
 
 interface KeyLike {
   key: string;
@@ -11,14 +10,12 @@ interface KeyLike {
   ctrlKey: boolean;
   altKey: boolean;
   shiftKey: boolean;
-  target: EventTarget | { tagName?: string; isContentEditable?: boolean } | null;
+  repeat?: boolean;
 }
 
-/** The command a key press asks for: ⌘ or Ctrl with S, O or E, and not while typing in a field. */
+/** The command a key press asks for: ⌘ or Ctrl with S, O or E, from anywhere (none types text), and not a held key's repeats. */
 export function shortcutFor(e: KeyLike): Shortcut | null {
-  if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return null;
-  const target = e.target as { tagName?: string; isContentEditable?: boolean } | null;
-  if (target && (target.isContentEditable || TEXT_TAGS.has(target.tagName ?? ''))) return null;
+  if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey || e.repeat) return null;
   return KEYS[e.key.toLowerCase()] ?? null;
 }
 
@@ -29,10 +26,11 @@ export function useShortcuts(handlers: Record<Shortcut, () => void>): void {
   latest.current = handlers;
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      const shortcut = shortcutFor(e);
+      // A held chord still belongs to the app, so the browser's own never opens; only the first press runs.
+      const shortcut = shortcutFor({ key: e.key, metaKey: e.metaKey, ctrlKey: e.ctrlKey, altKey: e.altKey, shiftKey: e.shiftKey });
       if (!shortcut) return;
       e.preventDefault();
-      latest.current[shortcut]();
+      if (!e.repeat) latest.current[shortcut]();
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);

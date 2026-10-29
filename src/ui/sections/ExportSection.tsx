@@ -1,12 +1,12 @@
 import React from 'react';
 import { exportFormats } from '../../state/exportFlow';
-import type { ExportFormatId } from '../../state/exportFlow';
+import type { ExportFormatId, ExportResult } from '../../state/exportFlow';
 import { FORMAT_ICON } from '../exportIcons';
 import type { SectionProps } from './types';
 
 /** What the Export section needs beyond the project: the export action and how the last one went. */
 export interface ExportControls {
-  onExport: (id: ExportFormatId) => Promise<boolean>;
+  onExport: (id: ExportFormatId) => Promise<ExportResult>;
   /** The last refusal or success line. */
   status: string | null;
   busy: boolean;

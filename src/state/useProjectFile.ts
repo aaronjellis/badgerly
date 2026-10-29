@@ -6,21 +6,11 @@ import type { BadgeProject } from '../engine/model';
 import { parseProject, PROJECT_EXTENSION, ProjectFileError, serializeProject } from '../engine/projectFile';
 import { triggerDownload } from '../ui/download';
 import { projectSlug } from './exportFlow';
+import { isUnsaved, savedFrom } from './projectFileState';
+import type { SavedState } from './projectFileState';
 import type { Action } from './reducer';
 
-/** The project as last saved, opened or started: the object itself, and its content as JSON. */
-export interface SavedState {
-  project: BadgeProject;
-  snapshot: string;
-}
-
-/** The project's content as JSON. A saved file stamps its save time, so it is not what unsaved compares. */
-export const snapshotOf = (project: BadgeProject): string => JSON.stringify(project);
-
-/** Whether the project differs from what was saved. The same object needs no comparing. */
-export function isUnsaved(project: BadgeProject, saved: SavedState): boolean {
-  return project !== saved.project && snapshotOf(project) !== saved.snapshot;
-}
+const DISCARD_PROMPT = 'Discard unsaved changes?';
 
 interface Options {
   project: BadgeProject;
@@ -43,7 +33,7 @@ export interface ProjectFile {
 
 export function useProjectFile({ project, dispatch, clearSelection, setStatus }: Options): ProjectFile {
   // The project the editor starts with counts as saved, so it is not unsaved until edited.
-  const [saved, setSaved] = useState<SavedState>(() => ({ project, snapshot: snapshotOf(project) }));
+  const [saved, setSaved] = useState<SavedState>(() => savedFrom(project));
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Saved and unsaved JSON-compare only when the project object has changed.
@@ -52,14 +42,14 @@ export function useProjectFile({ project, dispatch, clearSelection, setStatus }:
   const load = useCallback(
     (next: BadgeProject) => {
       dispatch({ type: 'load', project: next });
-      setSaved({ project: next, snapshot: snapshotOf(next) });
+      setSaved(savedFrom(next));
       clearSelection();
     },
     [dispatch, clearSelection]
   );
 
   const onNew = () => {
-    if (unsaved && !window.confirm('Discard unsaved changes?')) return;
+    if (unsaved && !window.confirm(DISCARD_PROMPT)) return;
     // A fresh project gets fresh ids, so it is loaded rather than made by the reducer: that way it is the saved one.
     load(defaultProject());
     setStatus(null);
@@ -67,7 +57,7 @@ export function useProjectFile({ project, dispatch, clearSelection, setStatus }:
 
   const onSave = () => {
     triggerDownload(new Blob([serializeProject(project)], { type: 'application/json' }), `${projectSlug(project.name)}${PROJECT_EXTENSION}`);
-    setSaved({ project, snapshot: snapshotOf(project) });
+    setSaved(savedFrom(project));
     setStatus(null);
   };
 
@@ -81,7 +71,10 @@ export function useProjectFile({ project, dispatch, clearSelection, setStatus }:
     if (!file) return;
     void (async () => {
       try {
-        load(parseProject(await file.text()));
+        const opened = parseProject(await file.text());
+        // A file that opens replaces the badge, so it asks first; cancelling leaves everything as it was.
+        if (unsaved && !window.confirm(DISCARD_PROMPT)) return;
+        load(opened);
         setStatus(null);
       } catch (error) {
         const message = error instanceof ProjectFileError ? error.message : 'The file could not be read.';

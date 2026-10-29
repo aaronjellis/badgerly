@@ -3,7 +3,6 @@ import { defaultProject } from '../src/engine/model';
 import type { BadgeProject } from '../src/engine/model';
 import { exportBadge, exportFormats, projectSlug } from '../src/state/exportFlow';
 import type { ExportFile } from '../src/state/exportFlow';
-import { isUnsaved, snapshotOf } from '../src/state/useProjectFile';
 import { fakeProvider, font } from './helpers/fonts';
 
 // `runExport` reports to `window.posthog`, which the node test environment lacks.
@@ -146,19 +145,5 @@ describe('exportBadge', () => {
     capture.mockClear();
     await run('svg', defaultProject(), fakeProvider(null));
     expect(capture).not.toHaveBeenCalled();
-  });
-});
-
-describe('isUnsaved', () => {
-  it('a project is saved against its own snapshot, and unsaved once edited', () => {
-    const p = defaultProject();
-    const saved = { project: p, snapshot: snapshotOf(p) };
-    expect(isUnsaved(p, saved)).toBe(false);
-    expect(isUnsaved({ ...p }, saved)).toBe(false); // a new object with the same content
-    expect(isUnsaved({ ...p, name: 'Other' }, saved)).toBe(true);
-  });
-  it('is stable across serializations, which stamp a save time', () => {
-    const p = defaultProject();
-    expect(snapshotOf(p)).toBe(snapshotOf(structuredClone(p)));
   });
 });

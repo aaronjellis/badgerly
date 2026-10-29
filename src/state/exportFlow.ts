@@ -30,6 +30,9 @@ export interface ExportIo {
   pause: (ms: number) => Promise<void>;
 }
 
+/** How a click on an export ended: a file was saved, the badge was refused or failed (the status says why), or another export was running. */
+export type ExportResult = 'downloaded' | 'refused' | 'busy';
+
 export interface ExportOutcome {
   ok: boolean;
   /** One sentence for the status line: what was downloaded, or why nothing was. */
