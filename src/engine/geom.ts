@@ -2,7 +2,7 @@
  * Polygon sets in millimeters on Clipper2. A Poly is a list of closed contours in Clipper's
  * orientation: outer contours have positive area, holes negative. Badge coordinates have y down.
  */
-import { Clipper, ClipperOffset, EndType, FillRule, JoinType, Path64, Paths64 } from 'clipper2-js';
+import { Clipper, FillRule, Path64, Paths64 } from 'clipper2-js';
 
 export type Pt = { x: number; y: number };
 export type Poly = Pt[][];
@@ -14,8 +14,6 @@ export const UNITS_PER_MM = 1000;
 export const PREVIEW_TOL_MM = 0.05;
 /** Chord tolerance for exported geometry. */
 export const EXPORT_TOL_MM = 0.01;
-
-const MITER_LIMIT = 2;
 
 export function toPaths64(poly: Poly): Paths64 {
   const paths = new Paths64();
@@ -49,30 +47,6 @@ export function intersect(a: Poly, b: Poly): Poly {
   return fromPaths64(Clipper.Intersect(toPaths64(a), toPaths64(b), FillRule.NonZero));
 }
 
-/**
- * A ClipperOffset whose polygon walk tracks the previous vertex. clipper2-js 1.2.4 passes
- * `offsetPoint` the last vertex's index for every vertex, which breaks every corner after the
- * first two. Open paths take another route (see `offsetOpen`), so only polygons need this.
- */
-function polygonOffsetter(tolMm: number): ClipperOffset {
-  const co = new ClipperOffset(MITER_LIMIT, tolMm * UNITS_PER_MM);
-  const walker = co as unknown as { offsetPoint(group: unknown, path: Path64, j: number, k: number): void };
-  const offsetPoint = walker.offsetPoint;
-  walker.offsetPoint = function (this: unknown, group, path, j) {
-    offsetPoint.call(this, group, path, j, (j + path.length - 1) % path.length);
-  };
-  return co;
-}
-
-/** Grows (positive) or shrinks (negative) a polygon with round joins, no chord further than `tolMm` from its arc. */
-export function offset(poly: Poly, deltaMm: number, tolMm: number): Poly {
-  const co = polygonOffsetter(tolMm);
-  co.addPaths(toPaths64(poly), JoinType.Round, EndType.Polygon);
-  const solution = new Paths64();
-  co.execute(deltaMm * UNITS_PER_MM, solution);
-  return fromPaths64(solution);
-}
-
 /** A closed integer path with positive area, so a non-zero union never cancels pieces against each other. */
 function positive(points: Pt[]): Path64 {
   const path = new Path64();
@@ -80,35 +54,60 @@ function positive(points: Pt[]): Path64 {
   return Clipper.area(path) < 0 ? (path.reverse() as Path64) : path;
 }
 
+/** A disc of radius `r` at `c` with no chord further than `tolMm` from the circle. */
+function disc(c: Pt, r: number, tolMm: number): Path64 {
+  const n = Math.max(8, Math.ceil(Math.PI / Math.acos(Math.max(0, 1 - tolMm / r))));
+  return positive(
+    Array.from({ length: n }, (_, k) => ({
+      x: c.x + r * Math.cos((2 * Math.PI * k) / n),
+      y: c.y + r * Math.sin((2 * Math.PI * k) / n),
+    }))
+  );
+}
+
+/** A rectangle `2 · d` wide along the segment `a`–`b`, or null for a zero-length segment. */
+function bar(a: Pt, b: Pt, d: number): Path64 | null {
+  const len = Math.hypot(b.x - a.x, b.y - a.y);
+  if (len === 0) return null;
+  const nx = (-(b.y - a.y) / len) * d;
+  const ny = ((b.x - a.x) / len) * d;
+  return positive([
+    { x: a.x + nx, y: a.y + ny },
+    { x: b.x + nx, y: b.y + ny },
+    { x: b.x - nx, y: b.y - ny },
+    { x: a.x - nx, y: a.y - ny },
+  ]);
+}
+
 /**
- * The outline of an open path as a stroke `2 · halfWidthMm` wide: butt ends, round joins. Built
- * from one rectangle per segment and a disc at every inner vertex, because clipper2-js 1.2.4
- * mis-walks open paths.
+ * Every point within `d` of the given paths: a bar along each edge and a disc at each vertex
+ * (a closed path) or inner vertex (an open one). Built from Clipper's booleans alone, because clipper2-js 1.2.4's offsetter mis-walks
+ * corners.
  */
-export function offsetOpen(path: Pt[], halfWidthMm: number, tolMm: number): Poly {
-  const steps = Math.max(8, Math.ceil(Math.PI / Math.acos(Math.max(0, 1 - tolMm / halfWidthMm))));
+function band(paths: Pt[][], closed: boolean, d: number, tolMm: number): Poly {
   const pieces = new Paths64();
-  for (let i = 1; i < path.length; i++) {
-    const a = path[i - 1];
-    const b = path[i];
-    const len = Math.hypot(b.x - a.x, b.y - a.y);
-    if (len === 0) continue;
-    const nx = (-(b.y - a.y) / len) * halfWidthMm;
-    const ny = ((b.x - a.x) / len) * halfWidthMm;
-    pieces.push(positive([
-      { x: a.x + nx, y: a.y + ny },
-      { x: b.x + nx, y: b.y + ny },
-      { x: b.x - nx, y: b.y - ny },
-      { x: a.x - nx, y: a.y - ny },
-    ]));
-  }
-  for (const v of path.slice(1, -1)) {
-    pieces.push(positive(Array.from({ length: steps }, (_, k) => ({
-      x: v.x + halfWidthMm * Math.cos((2 * Math.PI * k) / steps),
-      y: v.y + halfWidthMm * Math.sin((2 * Math.PI * k) / steps),
-    }))));
+  for (const path of paths) {
+    const edges = closed ? path.length : path.length - 1;
+    for (let i = 0; i < edges; i++) {
+      const piece = bar(path[i], path[(i + 1) % path.length], d);
+      if (piece) pieces.push(piece);
+    }
+    // A closed path has a vertex at every point; an open one has none at its two ends (butt ends).
+    for (const v of closed ? path : path.slice(1, -1)) pieces.push(disc(v, d, tolMm));
   }
   return fromPaths64(Clipper.Union(pieces, undefined, FillRule.NonZero));
+}
+
+/** Grows (positive) or shrinks (negative) a polygon with round joins, no chord further than `tolMm` from its arc. */
+export function offset(poly: Poly, deltaMm: number, tolMm: number): Poly {
+  if (deltaMm > 0) return union([poly, band(poly, true, deltaMm, tolMm)]);
+  if (deltaMm < 0) return difference(poly, band(poly, true, -deltaMm, tolMm));
+  return poly;
+}
+
+/** The outline of an open path as a stroke `2 · halfWidthMm` wide, with butt ends and round joins. */
+export function offsetOpen(path: Pt[], halfWidthMm: number, tolMm: number): Poly {
+  return band([path], false, halfWidthMm, tolMm);
 }
 
 /** The signed area of one contour in mm²: positive for an outer contour, negative for a hole. */

@@ -44,6 +44,15 @@ describe('geom', () => {
   it('offset inward by 1 shrinks a square by 1 on every side', () => {
     expect(area(offset(square(10), -1, 0.01))).toBeCloseTo(64, 3);
   });
+  it('offset inward on a square ring keeps both contours', () => {
+    const o = offset(difference(square(10), square(4)), -1, 0.01);
+    expect(o).toHaveLength(2);
+    // 8·8 outer minus the hole grown from 4·4 to 6·6; its four corners stay round, which gives back 4 − π.
+    expect(Math.abs(area(o) - (64 - 36 + 4 - Math.PI))).toBeLessThan(0.1);
+  });
+  it('offsetOpen of a straight segment has butt ends and no end caps', () => {
+    expect(area(offsetOpen([{x:0,y:0},{x:10,y:0}], 1, 0.01))).toBeCloseTo(20, 1);
+  });
   it('offsetOpen strokes a bent path with butt ends and a round inner join', () => {
     const stroke = offsetOpen([{x:0,y:0},{x:10,y:0},{x:10,y:10}], 1, 0.01);
     expect(outerCount(stroke)).toBe(1);
