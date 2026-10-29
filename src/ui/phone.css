@@ -72,7 +72,8 @@
   .part-chip,
   .chip,
   .btn-sm,
-  .link-btn {
+  .link-btn,
+  .shape-tile {
     min-height: 44px;
   }
 
