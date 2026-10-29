@@ -307,6 +307,11 @@ h4 {
   transition: background-color 0.15s var(--ease-out);
 }
 
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .btn-primary:hover:not(:disabled) {
   background: color-mix(in srgb, var(--accent) 88%, var(--ink));
 }
