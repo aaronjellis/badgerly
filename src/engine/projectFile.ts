@@ -1,0 +1,174 @@
+import { DEFAULT_BORDER } from './border';
+import type { BorderConfig, BorderStyle } from './border';
+import { BACKING_ID, DEFAULT_RELIEF, DEFAULT_ROLE, defaultBackingLayer, defaultLayers, defaultProject } from './model';
+import type { BadgeElement, BadgeProject, ElementRole, Layer, ReliefConfig } from './model';
+import { clampShape, DEFAULT_SHAPE, SHAPE_OPTIONS } from './shapes';
+import type { ShapeConfig } from './shapes';
+import { DEFAULT_TEXT } from './textOutline';
+import type { TextConfig } from './textOutline';
+
+/** The project file's extension; the file itself is JSON. */
+export const PROJECT_EXTENSION = '.badge';
+const FORMAT = 'badgerly-project';
+const VERSION = 1;
+
+/** The project as `.badge` file text. */
+export function serializeProject(project: BadgeProject): string {
+  return JSON.stringify({ format: FORMAT, savedAt: new Date().toISOString(), ...project, version: VERSION }, null, 2);
+}
+
+/** Why a file could not be opened, in words for the person who picked it. */
+export class ProjectFileError extends Error {}
+
+type Raw = Record<string, unknown>;
+
+const isRecord = (v: unknown): v is Raw => typeof v === 'object' && v !== null && !Array.isArray(v);
+const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+const isStr = (v: unknown): v is string => typeof v === 'string';
+const oneOf = <T extends string>(v: unknown, allowed: readonly T[], fallback: T): T =>
+  allowed.includes(v as T) ? (v as T) : fallback;
+
+/** `defaults` with every number, string or boolean field of `raw` that has the same type as its default. */
+function mergeScalars<T extends object>(defaults: T, raw: unknown): T {
+  const out = { ...defaults } as Raw;
+  if (!isRecord(raw)) return out as T;
+  for (const [key, fallback] of Object.entries(defaults)) {
+    const value = raw[key];
+    if (typeof fallback === 'number' ? isNum(value) : typeof value === typeof fallback && typeof fallback !== 'object') {
+      out[key] = value;
+    }
+  }
+  return out as T;
+}
+
+const SHAPE_KINDS = SHAPE_OPTIONS.map((o) => o.kind);
+const BORDER_STYLES: BorderStyle[] = ['none', 'single', 'double', 'dashed', 'corners'];
+
+function parseShape(raw: unknown): ShapeConfig {
+  const shape = mergeScalars(DEFAULT_SHAPE, raw);
+  shape.kind = oneOf(isRecord(raw) ? raw.kind : undefined, SHAPE_KINDS, DEFAULT_SHAPE.kind);
+  return clampShape(shape);
+}
+
+function parseBorder(raw: unknown): BorderConfig {
+  const border = mergeScalars(DEFAULT_BORDER, raw);
+  const r = isRecord(raw) ? raw : {};
+  border.style = oneOf(r.style, BORDER_STYLES, DEFAULT_BORDER.style);
+  border.relief = oneOf(r.relief, ['emboss', 'deboss'], DEFAULT_BORDER.relief);
+  return border;
+}
+
+function parseRelief(raw: unknown): ReliefConfig {
+  const relief = mergeScalars(DEFAULT_RELIEF, raw);
+  const r = isRecord(raw) ? raw : {};
+  relief.edge = oneOf(r.edge, ['none', 'chamfer', 'fillet'], DEFAULT_RELIEF.edge);
+  return relief;
+}
+
+/** Keeps valid layers, puts the backing first, and adds one when the file has none. */
+function parseLayers(raw: unknown): Layer[] {
+  if (!Array.isArray(raw)) return defaultLayers();
+  const seen = new Set<string>();
+  const layers: Layer[] = [];
+  for (const l of raw as unknown[]) {
+    if (!isRecord(l) || !isStr(l.id) || !isStr(l.name) || !isNum(l.thicknessMm) || seen.has(l.id)) continue;
+    seen.add(l.id);
+    layers.push({ id: l.id, name: l.name, thicknessMm: l.thicknessMm });
+  }
+  const backing = layers.find((l) => l.id === BACKING_ID) ?? defaultBackingLayer();
+  return [backing, ...layers.filter((l) => l.id !== BACKING_ID)];
+}
+
+function parseRole(raw: unknown, layerIds: Set<string>): ElementRole {
+  const r = isRecord(raw) ? raw : {};
+  return {
+    laser: oneOf(r.laser, ['engrave', 'score', 'cutout'], DEFAULT_ROLE.laser),
+    printColor: typeof r.printColor === 'boolean' ? r.printColor : DEFAULT_ROLE.printColor,
+    fill: isStr(r.fill) ? r.fill : DEFAULT_ROLE.fill,
+    layerId: isStr(r.layerId) && layerIds.has(r.layerId) ? r.layerId : null,
+    relief: oneOf(r.relief, ['emboss', 'deboss'], DEFAULT_ROLE.relief),
+    reliefMm: isNum(r.reliefMm) ? r.reliefMm : DEFAULT_ROLE.reliefMm,
+  };
+}
+
+/** The text settings, or null when the text or family is missing: nothing can be drawn without them. */
+function parseTextConfig(raw: unknown): TextConfig | null {
+  if (!isRecord(raw) || !isStr(raw.text) || !isStr(raw.family)) return null;
+  const text = mergeScalars(DEFAULT_TEXT, raw);
+  text.style = oneOf(raw.style, ['normal', 'italic'], DEFAULT_TEXT.style);
+  text.align = oneOf(raw.align, ['left', 'center', 'right'], DEFAULT_TEXT.align);
+  text.pairAdjustEm = isRecord(raw.pairAdjustEm)
+    ? Object.fromEntries(Object.entries(raw.pairAdjustEm).filter((e): e is [string, number] => isNum(e[1])))
+    : {};
+  return text;
+}
+
+/** One element, or null when its kind is unknown or a field it cannot do without is missing. */
+function parseElement(raw: unknown, layerIds: Set<string>): BadgeElement | null {
+  if (!isRecord(raw) || !isStr(raw.id) || !isNum(raw.x) || !isNum(raw.y) || !isNum(raw.rotationDeg)) return null;
+  const base = {
+    id: raw.id,
+    x: raw.x,
+    y: raw.y,
+    rotationDeg: raw.rotationDeg,
+    role: parseRole(raw.role, layerIds),
+  };
+  if (raw.kind === 'text') {
+    const text = parseTextConfig(raw.text);
+    if (!text || !isNum(raw.capHeightMm)) return null;
+    return { ...base, kind: 'text', name: isStr(raw.name) ? raw.name : 'Text', text, capHeightMm: raw.capHeightMm };
+  }
+  if (raw.kind === 'graphic') {
+    if (!isStr(raw.dataUrl) || !isNum(raw.widthMm) || !isNum(raw.heightMm)) return null;
+    return {
+      ...base,
+      kind: 'graphic',
+      name: isStr(raw.name) ? raw.name : 'Graphic',
+      dataUrl: raw.dataUrl,
+      vector: typeof raw.vector === 'boolean' ? raw.vector : false,
+      widthMm: raw.widthMm,
+      heightMm: raw.heightMm,
+    };
+  }
+  return null;
+}
+
+/**
+ * Reads `.badge` file text. Settings the file lacks take their defaults, and settings of the wrong
+ * type, elements of an unknown kind, and elements missing a required field are dropped, so files
+ * from older and newer versions both open.
+ */
+export function parseProject(text: string): BadgeProject {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    throw new ProjectFileError('This file isn’t a Badgerly project: it couldn’t be read.');
+  }
+  if (!isRecord(raw) || raw.format !== FORMAT) {
+    throw new ProjectFileError('This file isn’t a Badgerly project.');
+  }
+  if (typeof raw.version !== 'number' || raw.version > VERSION) {
+    throw new ProjectFileError('This project was saved by a newer Badgerly. Reload the page to update, then open it again.');
+  }
+
+  const defaults = defaultProject();
+  const layers = parseLayers(raw.layers);
+  const layerIds = new Set(layers.map((l) => l.id));
+  const elements = Array.isArray(raw.elements)
+    ? (raw.elements as unknown[]).flatMap((e) => parseElement(e, layerIds) ?? [])
+    : defaults.elements;
+
+  return {
+    version: VERSION,
+    name: isStr(raw.name) ? raw.name : defaults.name,
+    unit: oneOf(raw.unit, ['mm', 'in'], defaults.unit),
+    mode: oneOf(raw.mode, ['laser', 'print3d'], defaults.mode),
+    laserVariant: oneOf(raw.laserVariant, ['single', 'stacked', 'printcut'], defaults.laserVariant),
+    shape: parseShape(raw.shape),
+    border: parseBorder(raw.border),
+    elements,
+    layers,
+    relief: parseRelief(raw.relief),
+  };
+}
