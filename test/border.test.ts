@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { area, bounds, offset, outerCount, pathLength } from '../src/engine/geom';
-import type { Pt } from '../src/engine/geom';
+import { area, bounds, contains, offset, outerCount, pathLength } from '../src/engine/geom';
+import type { Poly, Pt } from '../src/engine/geom';
 import { buildShape, DEFAULT_SHAPE } from '../src/engine/shapes';
 import { buildBorder, dashPath, DEFAULT_BORDER, scoresBorder } from '../src/engine/border';
 import { CORNER_MOTIFS, motifPoly } from '../src/engine/cornerArt';
@@ -91,11 +91,32 @@ describe('buildBorder', () => {
     }
   });
 
-  it('keeps the whole line when the corners are far from the contour', () => {
-    const ellipse = buildShape({ ...DEFAULT_SHAPE, kind: 'ellipse' }, 0.01);
-    const g = buildBorder(ellipse, { ...DEFAULT_BORDER, style: 'corners' }, 0.01);
-    expect(g.centerlines.length).toBeGreaterThanOrEqual(1);
+  it.each(['ellipse', 'pill'] as const)('slides corner art into a %s so it stays inside the badge', (kind) => {
+    const outline = buildShape({ ...DEFAULT_SHAPE, kind }, 0.01);
+    const g = buildBorder(outline, { ...DEFAULT_BORDER, style: 'corners' }, 0.01);
+    expect(g.tooDeep).toBe(false);
+    expect(outerCount(g.ornaments)).toBeGreaterThanOrEqual(4);
+    expect(contains(outline, g.ornaments)).toBe(true);
+    expect(g.centerlines).toHaveLength(4);
     expect(g.closedLines).toBe(false);
+  });
+
+  it('moves a motif inward on a curved badge, and not at all on a rectangle', () => {
+    const box = (shape: Poly) => bounds(offset(shape, -3.175, 0.01))!;
+    const ellipse = buildShape({ ...DEFAULT_SHAPE, kind: 'ellipse' }, 0.01);
+    const ornamentBox = bounds(buildBorder(ellipse, { ...DEFAULT_BORDER, style: 'corners' }, 0.01).ornaments)!;
+    expect(ornamentBox.w).toBeLessThan(box(ellipse).w - 5);
+    const rect = buildShape({ ...DEFAULT_SHAPE, kind: 'rect' }, 0.01);
+    const rectBox = bounds(buildBorder(rect, { ...DEFAULT_BORDER, style: 'corners' }, 0.01).ornaments)!;
+    expect(rectBox.w).toBeCloseTo(box(rect).w, 1);
+  });
+
+  it('reports corner art that fits nowhere', () => {
+    const g = buildBorder(badge, { ...DEFAULT_BORDER, style: 'corners', motifSizeMm: 60 }, 0.01);
+    expect(g.tooDeep).toBe(true);
+    expect(g.bands).toHaveLength(0);
+    expect(g.centerlines).toHaveLength(0);
+    expect(g.ornaments).toHaveLength(0);
   });
 });
 
@@ -165,6 +186,15 @@ describe('corner motifs', () => {
       expect(b.y + b.h).toBeLessThanOrEqual(10 + 1e-6);
       expect(b.x).toBeLessThan(1);
       expect(b.y).toBeLessThan(1);
+    }
+  });
+
+  it('draws every motif with arms at least 6 units wide', () => {
+    // Opening by 3 units removes anything narrower than 6, apart from rounding off the corners.
+    for (const m of CORNER_MOTIFS) {
+      const poly = motifPoly(m.svg, 100, 0.05);
+      const opened = offset(offset(poly, -2.9, 0.05), 2.9, 0.05);
+      expect(area(opened) / area(poly), m.id).toBeGreaterThan(0.96);
     }
   });
 

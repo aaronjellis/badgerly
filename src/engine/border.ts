@@ -3,7 +3,7 @@
  * the 3D version, so every style produces the same three things: filled `bands` at the border's
  * width, the `centerlines` to score, and the corner `ornaments`.
  */
-import { bounds, difference, offset, offsetOpen, pathLength, union } from './geom';
+import { bounds, contains, difference, offset, offsetOpen, pathLength, union } from './geom';
 import type { Poly, Pt, Rect } from './geom';
 import { CORNER_MOTIFS, motifPoly } from './cornerArt';
 
@@ -168,26 +168,58 @@ function cutLoop(loop: Pt[], rects: Rect[]): Pt[][] {
   return runs.filter((r) => r.length >= 2);
 }
 
-function placeMotifs(center: Poly, border: BorderConfig, tolMm: number): { ornaments: Poly; squares: Rect[] } {
+/** How far a motif slides toward the badge center between checks. */
+const SLIDE_STEP_MM = 0.25;
+
+const square = (x: number, y: number, size: number): Poly => [
+  [{ x, y }, { x: x + size, y }, { x: x + size, y: y + size }, { x, y: y + size }],
+];
+
+/**
+ * The point where a motif's corner sits for one corner of `box`. It starts at the corner of the
+ * bounding box and slides toward the box center along the corner-to-center diagonal, in
+ * `SLIDE_STEP_MM` steps, until the motif's square lies inside `room`. Null when it never fits.
+ */
+function fitCorner(room: Poly, box: Rect, right: boolean, bottom: boolean, size: number): Pt | null {
+  const corner = { x: right ? box.x + box.w : box.x, y: bottom ? box.y + box.h : box.y };
+  const half = Math.hypot(box.w, box.h) / 2;
+  const ux = ((right ? -1 : 1) * box.w) / 2 / half;
+  const uy = ((bottom ? -1 : 1) * box.h) / 2 / half;
+  for (let k = 0; k * SLIDE_STEP_MM <= half; k++) {
+    const p = { x: corner.x + ux * k * SLIDE_STEP_MM, y: corner.y + uy * k * SLIDE_STEP_MM };
+    if (contains(room, square(right ? p.x - size : p.x, bottom ? p.y - size : p.y, size))) return p;
+  }
+  return null;
+}
+
+/**
+ * The four placed motifs and the squares that clear the line around them, or null when a motif
+ * fits nowhere. Each motif starts at its corner of the inset contour's bounding box, and slides
+ * inward only as far as it must: on a rectangle that is not at all, on an ellipse or a pill it
+ * clears the curve. A motif counts as inside when its square lies within the outline pulled in by
+ * half the inset, so the ornament may overhang the inset line by up to half the inset (a rounded
+ * rectangle's corner, whose motif sits just outside the rounded line) but never the badge edge.
+ */
+function placeMotifs(outline: Poly, center: Poly, border: BorderConfig, tolMm: number): { ornaments: Poly; squares: Rect[] } | null {
   const box = bounds(center);
-  if (!box) return { ornaments: [], squares: [] };
+  if (!box) return null;
   const motif = CORNER_MOTIFS.find((m) => m.id === border.motifId) ?? CORNER_MOTIFS[0];
   const size = border.motifSizeMm;
   const art = motifPoly(motif.svg, size, tolMm);
+  const room = offset(outline, -border.insetMm / 2, tolMm);
   const placed: Poly[] = [];
   const squares: Rect[] = [];
   for (const right of [false, true]) {
     for (const bottom of [false, true]) {
+      const at = fitCorner(room, box, right, bottom, size);
+      if (!at) return null;
       // The motif is drawn for the top-left corner; the others are its mirror images.
-      const x = (u: number) => (right ? box.x + box.w - u : box.x + u);
-      const y = (v: number) => (bottom ? box.y + box.h - v : box.y + v);
-      placed.push(art.map((contour) => contour.map((p) => ({ x: x(p.x), y: y(p.y) }))));
-      const reach = size + MOTIF_CLEARANCE_MM;
+      placed.push(art.map((contour) => contour.map((p) => ({ x: right ? at.x - p.x : at.x + p.x, y: bottom ? at.y - p.y : at.y + p.y }))));
       squares.push({
-        x: right ? box.x + box.w - reach : box.x - MOTIF_CLEARANCE_MM,
-        y: bottom ? box.y + box.h - reach : box.y - MOTIF_CLEARANCE_MM,
-        w: reach + MOTIF_CLEARANCE_MM,
-        h: reach + MOTIF_CLEARANCE_MM,
+        x: (right ? at.x - size : at.x) - MOTIF_CLEARANCE_MM,
+        y: (bottom ? at.y - size : at.y) - MOTIF_CLEARANCE_MM,
+        w: size + 2 * MOTIF_CLEARANCE_MM,
+        h: size + 2 * MOTIF_CLEARANCE_MM,
       });
     }
   }
@@ -232,7 +264,10 @@ export function buildBorder(outline: Poly, border: BorderConfig, tolMm: number):
       };
     }
     case 'corners': {
-      const { ornaments, squares } = placeMotifs(center, border, tolMm);
+      const placed = placeMotifs(outline, center, border, tolMm);
+      // A motif that fits nowhere means the badge is too small for the art: report it, draw nothing.
+      if (!placed) return nothing(border, true);
+      const { ornaments, squares } = placed;
       const runs = center.flatMap((contour) => cutLoop(contour, squares));
       return {
         bands: union(runs.map((run) => offsetOpen(run, widthMm / 2, tolMm))),

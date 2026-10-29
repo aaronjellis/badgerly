@@ -25,22 +25,23 @@ const motif = (id: string, label: string, pieces: string[]): CornerMotif => ({
 });
 
 export const CORNER_MOTIFS: CornerMotif[] = [
-  // A quarter disc squared into the corner, an arc band, and five tapered rays at 22.5 degree steps around (3.5, 3.5).
+  // A quarter disc squared into the corner, an arc band, and four tapered rays at 30 degree steps
+  // around (4, 4). The bars are 8 units wide; the rays taper to 6.4 at the tips.
   motif('deco-fan', 'Deco fan', [
-    'M3.5 3.5H25.5A22 22 0 0 1 3.5 25.5Z',
-    'M0 0H25.5V3.5H0ZM0 0H3.5V25.5H0Z',
-    'M63.5 3.5A60 60 0 0 1 3.5 63.5L3.5 55.5A52 52 0 0 0 55.5 3.5Z',
-    'M21.5 7L98.5 5.95L98.5 1.05L21.5 0Z',
-    'M18.6 14.08L90.2 42.44L92.34 37.27L21.66 6.69Z',
-    'M13.4 19.06L68.7 72.66L72.66 68.7L19.06 13.4Z',
-    'M6.69 21.66L37.27 92.34L42.44 90.2L14.08 18.6Z',
-    'M0 21.5L1.05 98.5L5.95 98.5L7 21.5Z',
+    'M4 4H26A22 22 0 0 1 4 26Z',
+    'M0 0H26V4H0ZM0 0H4V26H0Z',
+    'M64 4A60 60 0 0 1 4 64L4 56A52 52 0 0 0 56 4Z',
+    'M22 8L99 7.2L99 0.8L22 0Z',
+    'M17.59 16.46L84.67 54.27L87.87 48.73L21.59 9.54Z',
+    'M9.54 21.59L48.73 87.87L54.27 84.67L16.46 17.59Z',
+    'M0 22L0.8 99L7.2 99L8 22Z',
   ]),
-  // An outer L, and a staircase line inside it that is tied back to the L at both ends.
+  // An outer L, and a staircase line inside it that is tied back to the L at both ends. The lines
+  // are 6.5 units wide.
   motif('deco-step', 'Deco step', [
     'M0 0H100V8H8V100H0Z',
-    'M20.5 40.5H25.5V72.5H20.5ZM20.5 40.5H33.5V45.5H20.5ZM28.5 28.5H33.5V45.5H28.5ZM28.5 28.5H45.5V33.5H28.5Z' +
-      'M40.5 20.5H45.5V33.5H40.5ZM40.5 20.5H72.5V25.5H40.5ZM5.5 67.5H25.5V72.5H5.5ZM67.5 5.5H72.5V25.5H67.5Z',
+    'M19.75 44.75H26.25V75.25H19.75ZM19.75 44.75H38.25V51.25H19.75ZM31.75 32.75H38.25V51.25H31.75ZM31.75 32.75H50.25V39.25H31.75Z' +
+      'M43.75 20.75H50.25V39.25H43.75ZM43.75 20.75H77.25V27.25H43.75ZM4.75 68.75H26.25V75.25H4.75ZM70.75 4.75H77.25V27.25H70.75Z',
   ]),
   // An L with a serif at each end and a ring in the bend.
   motif('bracket', 'Bracket', [
