@@ -1,0 +1,27 @@
+/* The badge stage: what the Kerfuffle sheet view's CSS (viewport2d.css) does not cover. */
+
+/* The stage takes keyboard focus for the arrow keys; the ring sits inside its edge. */
+.stage2d:focus-visible {
+  outline: 2px solid var(--stage-accent);
+  outline-offset: -2px;
+}
+
+/* A selected element shows its box and handles, so a browser focus ring on top of it only adds noise. */
+.stage2d-hit {
+  cursor: grab;
+  outline: none;
+}
+
+.stage2d-hit:active {
+  cursor: grabbing;
+}
+
+.stage2d-handle-nw,
+.stage2d-handle-se {
+  cursor: nwse-resize;
+}
+
+.stage2d-handle-ne,
+.stage2d-handle-sw {
+  cursor: nesw-resize;
+}

@@ -148,7 +148,7 @@ function linesToSvgPath(lines: Pt[][], closed: boolean): string {
 const escapeAttr = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 
 /** The area a piece's content covers, with every image box turned as it is drawn. */
-function pieceBounds(piece: SvgPiece): Rect | null {
+export function pieceBounds(piece: SvgPiece): Rect | null {
   const polys: Poly[] = [piece.cut, piece.score, piece.engrave, ...piece.print.map((p) => p.poly)];
   for (const { el, box } of piece.images) {
     const corners = [{ x: box.x, y: box.y }, { x: box.x + box.w, y: box.y }, { x: box.x + box.w, y: box.y + box.h }, { x: box.x, y: box.y + box.h }];

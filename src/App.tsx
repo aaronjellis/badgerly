@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useProject } from './state/useProject';
 import { AppBar } from './ui/AppBar';
 import { Inspector } from './ui/Inspector';
+import { Stage2D } from './ui/Stage2D';
 import { partsForMode } from './ui/parts';
 import type { PartId } from './ui/parts';
 
@@ -51,7 +52,7 @@ export function App() {
         projectMenu={{ onNew: () => dispatch({ type: 'new' }), onOpen: () => {}, onSave: () => {}, unsaved: false }}
       />
       <div className="app-body">
-        <div className="stage" />
+        <Stage2D project={project} resolved={resolved} selectedId={selectedId} onSelect={setSelectedId} dispatch={dispatch} unit={project.unit} />
         <Inspector
           settingQuery={settingQuery}
           onSettingQuery={setSettingQuery}
