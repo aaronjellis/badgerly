@@ -20,7 +20,7 @@ import type { TextOutline } from './textOutline';
 
 export type WarningCode =
   | 'missingFont' | 'fontLoading' | 'strokeOnlySvg' | 'islands' | 'bridged'
-  | 'borderTooDeep' | 'outsideFlat' | 'floatingCounter' | 'noElements';
+  | 'borderTooDeep' | 'outsideFlat' | 'floatingCounter' | 'noElements' | 'thin';
 
 export interface Warning {
   code: WarningCode;

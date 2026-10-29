@@ -30,6 +30,17 @@ const png = (): GraphicElement => ({
   heightMm: 20,
 });
 
+/** A vector graphic `w` × `h` mm drawn from `body`, at (40, 0). */
+const svgGraphic = (body: string, w: number, h: number): GraphicElement => ({
+  ...png(),
+  name: 'Bar',
+  x: 40,
+  dataUrl: `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 3 40">${body}</svg>`)}`,
+  vector: true,
+  widthMm: w,
+  heightMm: h,
+});
+
 const rect = (x0: number, y0: number, x1: number, y1: number): Poly =>
   [[{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }]];
 
@@ -149,11 +160,48 @@ describe('relief', () => {
     const { p, r } = r3d();
     expect(clampRelief(p.relief, r.outline)).toEqual(p.relief);
     const out = buildRelief(p, r, 0.01);
-    expect(out.clamped).toEqual({ edgeMm: null, debossMm: null });
+    expect(out.clamped).toEqual({ edgeMm: null, debossMm: null, recessMm: null });
+  });
+  it('reports a split recess deeper than the plate allows', () => {
+    const { p, r } = r3d(p => { p.relief.split = true; p.relief.recessMm = 4; });
+    const out = buildRelief(p, r, 0.01);
+    expect(out.clamped.recessMm).toBe(2.6);
+    expect(isClosed(out.plate)).toBe(true);
+    expect(out.parts && isClosed(out.parts)).toBe(true);
+  });
+  it('the default badge raises no warnings', () => {
+    const { p, r } = r3d();
+    expect(buildRelief(p, r, 0.01).warnings).toEqual([]);
+  });
+  it('warns when the border runs onto the edge', () => {
+    const { p, r } = r3d(p => { p.border.insetMm = 0.5; });
+    const codes = buildRelief(p, r, 0.01).warnings.map(w => [w.code, w.elementId]);
+    expect(codes).toEqual([['outsideFlat', undefined]]);
+  });
+  it('warns about a raised or sunk element thinner than 0.5 mm', () => {
+    for (const relief of ['emboss', 'deboss'] as const) {
+      const { p, r } = r3d(p => {
+        p.border.style = 'none';
+        const bar = svgGraphic('<rect width="3" height="40"/>', 0.3, 4);
+        bar.role.relief = relief;
+        p.elements.push(bar);
+      });
+      const thin = buildRelief(p, r, 0.01).warnings.filter(w => w.code === 'thin');
+      expect(thin.map(w => w.elementId)).toEqual([p.elements[1].id]);
+      expect(thin[0].message).toBe('Part of this element is thinner than 0.5 mm and may not print.');
+    }
+  });
+  it('warns about a border thinner than 0.5 mm', () => {
+    const { p, r } = r3d(p => { p.border.widthMm = 0.3; });
+    const thin = buildRelief(p, r, 0.01).warnings.filter(w => w.code === 'thin');
+    expect(thin).toEqual([{ code: 'thin', message: 'The border is thinner than 0.5 mm and may not print.' }]);
   });
   it('reliefPolys sorts elements and the border by role and clips them to the flat top', () => {
     const { p, r } = r3d(p => { p.border.relief = 'deboss'; p.border.reliefMm = 9; });
     const { emboss, deboss } = reliefPolys(p, r);
+    expect(reliefPolys(p, r, r.flat, union([r.border.bands, r.border.ornaments]))).toEqual({ emboss, deboss });
+    expect(emboss[0].elementId).toBe(p.elements[0].id);
+    expect(deboss[0].elementId).toBeUndefined();
     expect(emboss.map(e => e.mm)).toEqual([1]);
     expect(deboss.map(e => e.mm)).toEqual([2.6]);
     expect(area(emboss[0].poly)).toBeCloseTo(area(r.elements[0].poly), 0);

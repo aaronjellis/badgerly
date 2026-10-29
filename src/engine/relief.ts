@@ -12,7 +12,7 @@
  * edge (see `separate`), so the plate top's holes and islands are exactly the cells' contours and
  * every wall between them shares its points with both caps.
  */
-import { bounds, contains, difference, intersect, offset, union } from './geom';
+import { area, bounds, contains, difference, intersect, offset, union } from './geom';
 import type { Poly, Pt } from './geom';
 import { capMesh, mergeMeshes, wallMesh } from './mesh';
 import type { Mesh } from './mesh';
@@ -25,7 +25,7 @@ export interface ReliefResult {
   /** The drop-in parts of a split badge, standing on the bed; null without a split. */
   parts: Mesh | null;
   /** The sizes used where the project's did not fit, else null. */
-  clamped: { edgeMm: number | null; debossMm: number | null };
+  clamped: { edgeMm: number | null; debossMm: number | null; recessMm: number | null };
   warnings: Warning[];
 }
 
@@ -38,6 +38,17 @@ const EDGE_MARGIN_MM = 0.5;
  * edge: wide enough that Clipper's rounding never lets them touch, far below print resolution.
  */
 const GAP_MM = 0.01;
+/**
+ * Half the narrowest feature that reliably prints (0.5 mm), less 5 µm so a feature exactly
+ * 0.5 mm wide, such as the default border, does not vanish when pulled in by it.
+ */
+const THIN_HALF_MM = 0.245;
+/**
+ * The share of a feature an opening may remove before it counts as thin. Opening also rounds
+ * every sharp corner: on the default Cinzel 700 text at 7.62 mm caps that alone removes 5%;
+ * at 5 mm caps, where hairlines and serifs are genuinely under 0.5 mm, it removes 14%.
+ */
+const THIN_LOSS = 0.1;
 
 const maxDebossMm = (relief: ReliefConfig) => Math.max(0, relief.plateMm - MIN_FLOOR_MM);
 
@@ -56,39 +67,52 @@ export function clampRelief(relief: ReliefConfig, outline: Poly): ReliefConfig {
   };
 }
 
-type Feature = { poly: Poly; mm: number };
+/** A raised or sunk region; `elementId` is unset for the border. */
+type Feature = { poly: Poly; mm: number; elementId?: string };
 
 /**
  * Every raised and sunk feature: each element by its role, and the border (bands and ornaments)
  * by its own relief, clipped to `flat`, with each deboss held to the plate less 0.4 mm. Raster
  * graphics have no outline and are left out. `flat` defaults to the resolved flat top;
- * `buildRelief` passes the one its edge actually leaves.
+ * `buildRelief` passes the one its edge actually leaves, and the border poly it already has.
  */
 export function reliefPolys(
   project: BadgeProject,
   resolved: ResolvedBadge,
-  flat: Poly = resolved.flat
+  flat: Poly = resolved.flat,
+  border: Poly = borderPoly(resolved)
 ): { emboss: Feature[]; deboss: Feature[] } {
   const maxDeboss = maxDebossMm(project.relief);
   const emboss: Feature[] = [];
   const deboss: Feature[] = [];
-  const add = (poly: Poly, relief: 'emboss' | 'deboss', mm: number) => {
+  const add = (poly: Poly, relief: 'emboss' | 'deboss', mm: number, elementId?: string) => {
     if (poly.length === 0) return;
     const clipped = intersect(poly, flat);
     if (clipped.length === 0) return;
-    if (relief === 'emboss' && mm > 0) emboss.push({ poly: clipped, mm });
-    if (relief === 'deboss' && Math.min(mm, maxDeboss) > 0) deboss.push({ poly: clipped, mm: Math.min(mm, maxDeboss) });
+    const id = elementId === undefined ? {} : { elementId };
+    if (relief === 'emboss' && mm > 0) emboss.push({ poly: clipped, mm, ...id });
+    if (relief === 'deboss' && Math.min(mm, maxDeboss) > 0) deboss.push({ poly: clipped, mm: Math.min(mm, maxDeboss), ...id });
   };
   const roles = new Map(project.elements.map((el) => [el.id, el.role]));
   for (const e of resolved.elements) {
     const role = roles.get(e.id);
-    if (role && !e.raster) add(e.poly, role.relief, role.reliefMm);
+    if (role && !e.raster) add(e.poly, role.relief, role.reliefMm, e.id);
   }
-  add(borderPoly(resolved), project.border.relief, project.border.reliefMm);
+  add(border, project.border.relief, project.border.reliefMm);
   return { emboss, deboss };
 }
 
 const borderPoly = (resolved: ResolvedBadge): Poly => union([resolved.border.bands, resolved.border.ornaments]);
+
+/**
+ * Whether part of `poly` is narrower than 0.5 mm: opening it (pulling in by THIN_HALF_MM, then
+ * pushing back out) loses more than THIN_LOSS of its area, or all of it.
+ */
+function isThin(poly: Poly, tolMm: number): boolean {
+  const opened = offset(offset(poly, -THIN_HALF_MM, tolMm), THIN_HALF_MM, tolMm);
+  const a = area(poly);
+  return opened.length === 0 || a - area(opened) > THIN_LOSS * a;
+}
 
 /** A cell of the top: a region and the height of its face. */
 type Cell = { poly: Poly; z: number };
@@ -198,11 +222,17 @@ export function buildRelief(project: BadgeProject, resolved: ResolvedBadge, tolM
 
   const body = plateBody(outline, relief, tolMm);
   const flat = body.flat;
-  const { emboss, deboss } = reliefPolys(project, resolved, flat);
-
   const border = borderPoly(resolved);
+  const { emboss, deboss } = reliefPolys(project, resolved, flat, border);
+
   if (border.length > 0 && !contains(flat, border)) {
     warnings.push({ code: 'outsideFlat', message: "The border runs onto the badge's edge. Move it inward." });
+  }
+  for (const f of [...emboss, ...deboss]) {
+    if (!isThin(f.poly, tolMm)) continue;
+    warnings.push(f.elementId === undefined
+      ? { code: 'thin', message: 'The border is thinner than 0.5 mm and may not print.' }
+      : { code: 'thin', elementId: f.elementId, message: 'Part of this element is thinner than 0.5 mm and may not print.' });
   }
 
   const raised = groupByHeight(emboss, (mm) => plateMm + mm).sort((a, b) => b.z - a.z);
@@ -230,6 +260,7 @@ export function buildRelief(project: BadgeProject, resolved: ResolvedBadge, tolM
     clamped: {
       edgeMm: project.relief.edge !== 'none' && relief.edgeMm !== project.relief.edgeMm ? relief.edgeMm : null,
       debossMm: sunkMm.some((mm) => mm > maxDeboss) ? maxDeboss : null,
+      recessMm: relief.recessMm !== project.relief.recessMm ? relief.recessMm : null,
     },
     warnings,
   };
