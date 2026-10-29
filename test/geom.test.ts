@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { area, bounds, closeIslands, contains, difference, dropHoles, offset, offsetOpen, outerCount, pathLength, polyToSvgPath, rotate, scale, translate, union } from '../src/engine/geom';
+import { area, bounds, closeIslands, contains, difference, dropHoles, grow, offset, offsetOpen, outerCount, pathLength, polyToSvgPath, rotate, scale, translate, union } from '../src/engine/geom';
 import type { Poly } from '../src/engine/geom';
 
 const square = (s: number, cx = 0, cy = 0): Poly => [[{x:cx-s/2,y:cy-s/2},{x:cx+s/2,y:cy-s/2},{x:cx+s/2,y:cy+s/2},{x:cx-s/2,y:cy+s/2}]];
@@ -33,6 +33,23 @@ describe('geom', () => {
     const r = closeIslands(union([square(10, -40, 0), square(10, 40, 0)]), 1, 4, 0.01);
     expect(r.joined).toBe(false);
     expect(outerCount(r.poly)).toBe(2);
+  });
+  it('closeIslands with a start of zero returns the input instead of looping', () => {
+    const two = union([square(10, -40, 0), square(10, 40, 0)]);
+    for (const start of [0, -1]) {
+      const r = closeIslands(two, start, 50, 0.01);
+      expect(r).toEqual({ poly: two, bridgedMm: 0, joined: false });
+    }
+  });
+  it('grow covers the same region as an outward offset, holes included', () => {
+    const ring = difference(square(20), square(8));
+    const pieces = union([square(4, -20, 0), square(4, 20, 0), ...[-6, -2, 2, 6].map((x) => square(1, x, 30))]);
+    for (const poly of [ring, pieces]) {
+      const a = offset(poly, 1, 0.01);
+      const b = grow(poly, 1, 0.01);
+      expect(area(b)).toBeCloseTo(area(a), 2);
+      expect(area(difference(a, b)) + area(difference(b, a))).toBeLessThan(1e-3);
+    }
   });
   it('rotate by 90 about the origin swaps the bounds', () => {
     const b = bounds(rotate([[{x:0,y:0},{x:4,y:0},{x:4,y:2},{x:0,y:2}]], 90))!;

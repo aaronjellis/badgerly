@@ -12,7 +12,7 @@
  * edge (see `separate`), so the plate top's holes and islands are exactly the cells' contours and
  * every wall between them shares its points with both caps.
  */
-import { area, bounds, contains, difference, intersect, offset, union } from './geom';
+import { area, bounds, contains, difference, grow, intersect, offset, outerCount, union } from './geom';
 import type { Poly, Pt } from './geom';
 import { capMesh, mergeMeshes, mirrorY, wallMesh } from './mesh';
 import type { Mesh } from './mesh';
@@ -111,10 +111,14 @@ const borderPoly = (resolved: ResolvedBadge): Poly => union([resolved.border.ban
 
 /**
  * Whether part of `poly` is narrower than 0.5 mm: opening it (pulling in by THIN_HALF_MM, then
- * pushing back out) loses more than THIN_LOSS of its area, or all of it.
+ * pushing back out) loses more than THIN_LOSS of its area, or all of it. A feature that splits when
+ * pulled in (a 0.5 mm border hugging lettering breaks into hundreds of slivers) is pushed back out
+ * piece by piece with `grow`, since one offset of all of them stalls for minutes.
  */
 function isThin(poly: Poly, tolMm: number): boolean {
-  const opened = offset(offset(poly, -THIN_HALF_MM, tolMm), THIN_HALF_MM, tolMm);
+  const inward = offset(poly, -THIN_HALF_MM, tolMm);
+  if (inward.length === 0) return true;
+  const opened = outerCount(inward) > outerCount(poly) ? grow(inward, THIN_HALF_MM, tolMm) : offset(inward, THIN_HALF_MM, tolMm);
   const a = area(poly);
   return opened.length === 0 || a - area(opened) > THIN_LOSS * a;
 }

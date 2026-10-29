@@ -105,6 +105,22 @@ export function offset(poly: Poly, deltaMm: number, tolMm: number): Poly {
   return poly;
 }
 
+/**
+ * The same region as `offset(poly, deltaMm)` for a positive delta, built one contour's band at a time
+ * and merged two at a time. One union of every bar and disc of a poly made of hundreds of slivers
+ * (a thin line pulled in until it breaks up) stalls clipper2-js for minutes; this takes a fraction of a second.
+ */
+export function grow(poly: Poly, deltaMm: number, tolMm: number): Poly {
+  if (!(deltaMm > 0)) return offset(poly, deltaMm, tolMm);
+  let level: Poly[] = [poly, ...poly.map((contour) => band([contour], true, deltaMm, tolMm))];
+  while (level.length > 1) {
+    const next: Poly[] = [];
+    for (let i = 0; i < level.length; i += 2) next.push(i + 1 < level.length ? union([level[i], level[i + 1]]) : level[i]);
+    level = next;
+  }
+  return level[0];
+}
+
 /** The outline of an open path as a stroke `2 · halfWidthMm` wide, with butt ends and round joins. */
 export function offsetOpen(path: Pt[], halfWidthMm: number, tolMm: number): Poly {
   return band([path], false, halfWidthMm, tolMm);
@@ -153,7 +169,8 @@ export function dropHoles(poly: Poly): Poly {
 /**
  * Bridges gaps between islands by closing: grow by `d`, then shrink by `d`. Starts at `startMm`
  * and doubles `d` until one outer contour remains or the next `d` would pass `capMm`. When
- * nothing joins, returns the original polygon and the last `d` tried.
+ * nothing joins, returns the original polygon and the last `d` tried; a `startMm` of zero or less
+ * joins nothing.
  */
 export function closeIslands(
   poly: Poly,
@@ -162,6 +179,8 @@ export function closeIslands(
   tolMm: number
 ): { poly: Poly; bridgedMm: number; joined: boolean } {
   if (outerCount(poly) <= 1) return { poly, bridgedMm: 0, joined: true };
+  // Doubling a gap of zero never reaches the cap.
+  if (!(startMm > 0)) return { poly, bridgedMm: 0, joined: false };
   let d = startMm;
   for (;;) {
     const closed = offset(offset(poly, d, tolMm), -d, tolMm);

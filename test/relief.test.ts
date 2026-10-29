@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { area, union } from '../src/engine/geom';
+import { area, PREVIEW_TOL_MM, union } from '../src/engine/geom';
 import type { Poly } from '../src/engine/geom';
 import { isClosed, signedVolume } from '../src/engine/mesh';
 import { defaultProject, DEFAULT_ROLE, newId } from '../src/engine/model';
@@ -224,6 +224,15 @@ describe('relief', () => {
     expect(mean((q) => q.x)).toBeCloseTo(20, 0);
     expect(mean((q) => q.y)).toBeCloseTo(10, 0);
   });
+  it('builds a hug-the-lettering badge with a double border at preview tolerance in under 3 s', () => {
+    // Pulled in for the thin check, the double border around the lettering splits into hundreds of pieces;
+    // pushing those back out used to take minutes and froze the 3D view.
+    const { p, r } = r3d(p => { p.shape.kind = 'hugText'; p.border.style = 'double'; }, PREVIEW_TOL_MM);
+    const out = buildRelief(p, r, PREVIEW_TOL_MM);
+    expect(isClosed(out.plate)).toBe(true);
+    // The 0.5 mm lines survive opening but for their corners, so they are not thin.
+    expect(out.warnings).toEqual([]);
+  }, 3000);
   it('mirrors the parts of a split the same way', () => {
     const { p, r } = r3d(p => {
       p.elements = [{ ...svgGraphic('<rect width="3" height="40"/>', 6, 6), x: 20, y: -10 }];
