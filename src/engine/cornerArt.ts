@@ -3,9 +3,9 @@
  * box as filled paths only (no strokes), with arms about 6 to 10 units thick, in the stepped,
  * geometric style of art deco frames. The border mirrors it into the other three corners.
  */
-import { scale } from './geom';
+import { scale, translate } from './geom';
 import type { Poly } from './geom';
-import { parseSvgShape } from './svgShape';
+import { parseSvgShape, svgViewBox } from './svgShape';
 
 export interface CornerMotif {
   id: string;
@@ -14,7 +14,7 @@ export interface CornerMotif {
   svg: string;
 }
 
-/** The side of the motif box, in the units the paths are drawn in. */
+/** The side of the catalog motifs' box, in the units their paths are drawn in. */
 const BOX = 100;
 
 /** One `<path>` per piece, so pieces with opposite winding never cancel each other. */
@@ -68,11 +68,15 @@ export const CORNER_MOTIFS: CornerMotif[] = [
 ];
 
 /**
- * The motif as a polygon set in mm, with its 100-unit box scaled to `sizeMm` and its corner at
- * the origin. Flattening tolerance is `tolMm` measured on the scaled result. A motif that does
- * not parse gives an empty polygon.
+ * The motif as a polygon set in mm, with the longer side of its viewBox scaled to `sizeMm` and the
+ * viewBox's top-left corner at the origin, so an uploaded motif drawn in any box (24 units, 512,
+ * or one that starts away from 0 0) comes out the asked size. Flattening tolerance is `tolMm`
+ * measured on the scaled result. A motif that does not parse gives an empty polygon.
  */
 export function motifPoly(svg: string, sizeMm: number, tolMm: number): Poly {
-  const shape = parseSvgShape(svg, tolMm * (BOX / sizeMm));
-  return shape ? scale(shape.poly, sizeMm / BOX) : [];
+  const box = svgViewBox(svg);
+  if (!box) return [];
+  const side = Math.max(box.w, box.h);
+  const shape = parseSvgShape(svg, tolMm * (side / sizeMm));
+  return shape ? scale(translate(shape.poly, -box.x, -box.y), sizeMm / side) : [];
 }

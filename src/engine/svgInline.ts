@@ -23,10 +23,33 @@ function userUnits(value: string | undefined): number | null {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
+/** Elements that run code, load other documents, or change the drawing over time. */
+const DROPPED = 'script|foreignObject|animate\\w*|set';
+
+/**
+ * Drawing markup with nothing active left in it: no scripts, foreign objects, animations, or event
+ * handlers, and no link that is not to the drawing itself (an `#id`) or an embedded image (`data:image/`),
+ * so no `javascript:` URL or outside file.
+ */
+export function sanitize(markup: string): string {
+  return markup
+    .replace(new RegExp(`<(${DROPPED})\\b[^>]*?\\/>`, 'gi'), '')
+    .replace(new RegExp(`<(${DROPPED})\\b[\\s\\S]*?<\\/\\1\\s*>`, 'gi'), '')
+    .replace(new RegExp(`<\\/?(${DROPPED})\\b[^>]*>`, 'gi'), '')
+    .replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+    .replace(/\s(?:xlink:)?href\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, (attr, quoted: string) => {
+      const value = quoted.replace(/^["']|["']$/g, '').trim();
+      return value.startsWith('#') || /^data:image\//i.test(value) ? attr : '';
+    })
+    .replace(/@import[^;]*;?/gi, '')
+    .replace(/url\(\s*(?!['"]?(?:#|data:image\/))[^)]*\)/gi, 'none')
+    .replace(/javascript\s*:/gi, '');
+}
+
 /**
  * The SVG's contents as a group placed in a box: fitted inside it at its own shape and centred (the
- * export's `xMidYMid meet`), then turned `rotationDeg` about the box's centre. Scripts, event
- * handlers and foreign objects are dropped, and every id (and each reference to one) is prefixed
+ * export's `xMidYMid meet`), then turned `rotationDeg` about the box's centre. Everything `sanitize`
+ * names is dropped, and every id (and each reference to one) is prefixed
  * with `idPrefix` so two drawings' gradients, masks or clip paths can't collide. Null when the SVG
  * has no viewBox and no plain width and height to place it by.
  */
@@ -51,11 +74,8 @@ export function inlineSvgArtwork(
   }
   const [minX, minY, vw, vh] = vb;
 
-  let body = svg.slice(open.index + open[0].length, close);
+  let body = sanitize(svg.slice(open.index + open[0].length, close));
   body = body
-    .replace(/<script\b[\s\S]*?<\/script>/gi, '')
-    .replace(/<foreignObject\b[\s\S]*?<\/foreignObject>/gi, '')
-    .replace(/\son\w+\s*=\s*("[^"]*"|'[^']*')/gi, '')
     .replace(/(\sid\s*=\s*["'])([^"']+)(["'])/g, `$1${idPrefix}$2$3`)
     .replace(/url\(\s*(['"]?)#([^)'"]+)\1\s*\)/g, `url(#${idPrefix}$2)`)
     .replace(/((?:xlink:)?href\s*=\s*["'])#([^"']+)(["'])/g, `$1#${idPrefix}$2$3`);
@@ -67,8 +87,8 @@ export function inlineSvgArtwork(
   const turn = rotationDeg !== 0 ? `rotate(${n(rotationDeg)} ${n(box.x + box.w / 2)} ${n(box.y + box.h / 2)}) ` : '';
   const transform = `${turn}translate(${n(ox)} ${n(oy)}) scale(${n(s)}) translate(${n(-minX)} ${n(-minY)})`;
   const carried = attrs
-    .filter(([k]) => !PLACEMENT_ATTRS.has(k.toLowerCase()) && !k.toLowerCase().startsWith('xmlns') && !/^on/i.test(k))
-    .map(([k, v]) => ` ${k}="${escapeAttr(v)}"`)
+    .filter(([k]) => !PLACEMENT_ATTRS.has(k.toLowerCase()) && !k.toLowerCase().startsWith('xmlns') && !/^on/i.test(k) && !/href$/i.test(k))
+    .map(([k, v]) => sanitize(` ${k}="${escapeAttr(v)}"`))
     .join('');
   return `<g id="${idPrefix}art" transform="${transform}"${carried}>${body}</g>`;
 }

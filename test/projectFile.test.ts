@@ -194,7 +194,7 @@ describe('projectFile', () => {
   });
 
   it('drops a graphic element with a non-positive size', () => {
-    const g = { kind: 'graphic', id: 'g', name: 'G', x: 0, y: 0, rotationDeg: 0, role, dataUrl: 'data:,', vector: false, widthMm: 1, heightMm: 1 };
+    const g = { kind: 'graphic', id: 'g', name: 'G', x: 0, y: 0, rotationDeg: 0, role, dataUrl: 'data:image/png;base64,AA==', vector: false, widthMm: 1, heightMm: 1 };
     expect(parse({ elements: [{ ...g, widthMm: 0 }, { ...g, heightMm: -2 }, g] }).elements).toHaveLength(1);
   });
 
@@ -206,5 +206,44 @@ describe('projectFile', () => {
   it('turns a layerId of backing into null', () => {
     const p = parse({ elements: [textElement({ role: { ...role, layerId: 'backing' } })] });
     expect(p.elements[0].role.layerId).toBeNull();
+  });
+
+  it('puts a relief or border size that is not above zero back to its default', () => {
+    const p = parse({
+      relief: { plateMm: 0, edgeMm: -1, recessMm: 0, clearanceMm: -0.1 },
+      border: { widthMm: 0, gapMm: -1, dashMm: 0, dashGapMm: 0, motifSizeMm: 0, reliefMm: -2, insetMm: -3 },
+      elements: [textElement({ role: { ...role, reliefMm: 0 } })],
+    });
+    expect(p.relief).toEqual(defaultProject().relief);
+    expect(p.border).toEqual(DEFAULT_BORDER);
+    expect(p.elements[0].role.reliefMm).toBe(1);
+    // Zero is a real clearance and a real inset (the inset is then held to half the line).
+    const zero = parse({ relief: { clearanceMm: 0 }, border: { insetMm: 0 } });
+    expect(zero.relief.clearanceMm).toBe(0);
+    expect(zero.border.insetMm).toBe(DEFAULT_BORDER.widthMm / 2);
+  });
+
+  it('gives a repeated element id a new one, keeping the first', () => {
+    const p = parse({ elements: [textElement({ id: 'same' }), textElement({ id: 'same', name: 'Second' }), textElement({ id: 'other' })] });
+    expect(p.elements[0].id).toBe('same');
+    expect(p.elements[1].id).not.toBe('same');
+    expect(p.elements[1].name).toBe('Second');
+    expect(new Set(p.elements.map((e) => e.id)).size).toBe(3);
+  });
+
+  it('says a file without a version is not a Badgerly project', () => {
+    expect(() => parseProject(JSON.stringify({ format: 'badgerly-project' }))).toThrow('This file isn’t a Badgerly project.');
+  });
+
+  it('drops a graphic whose data URL is not an image', () => {
+    const g = { kind: 'graphic', id: 'g', name: 'G', x: 0, y: 0, rotationDeg: 0, role, vector: true, widthMm: 1, heightMm: 1 };
+    const p = parse({ elements: [{ ...g, dataUrl: 'https://example.com/a.svg' }, { ...g, dataUrl: 'data:text/html,<script>1</script>' }, { ...g, id: 'ok', dataUrl: 'data:image/svg+xml,%3Csvg%2F%3E' }] });
+    expect(p.elements.map((e) => e.id)).toEqual(['ok']);
+  });
+
+  it('keeps only pair adjustments keyed line:index', () => {
+    const p = parse({ elements: [textElement({ text: { ...DEFAULT_TEXT, pairAdjustEm: { '0:1': 0.1, '1:12': -0.2, x: 0.3, '0:': 1, '0:1:2': 1, '-1:2': 1 } } })] });
+    const el = p.elements[0];
+    expect(el.kind === 'text' && el.text.pairAdjustEm).toEqual({ '0:1': 0.1, '1:12': -0.2 });
   });
 });

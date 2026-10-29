@@ -75,6 +75,17 @@ describe('buildBorder', () => {
     }
   });
 
+  it('drops a corner run shorter than 1 mm', () => {
+    // 28.85 mm wide: the top and bottom runs between the motifs are 28.85 − 2 · 3.175 − 2 · 11 = 0.5 mm.
+    const narrow = buildShape({ ...DEFAULT_SHAPE, kind: 'rect', widthMm: 28.85, heightMm: 60 }, 0.01);
+    const g = buildBorder(narrow, { ...DEFAULT_BORDER, style: 'corners' }, 0.01);
+    expect(g.tooDeep).toBe(false);
+    expect(g.centerlines).toHaveLength(2);
+    for (const run of g.centerlines) expect(pathLength(run, false)).toBeGreaterThan(30);
+    const wider = buildBorder(buildShape({ ...DEFAULT_SHAPE, kind: 'rect', widthMm: 30.5, heightMm: 60 }, 0.01), { ...DEFAULT_BORDER, style: 'corners' }, 0.01);
+    expect(wider.centerlines).toHaveLength(4);
+  });
+
   it('places a motif in every corner of the inset contour', () => {
     const g = buildBorder(badge, { ...DEFAULT_BORDER, style: 'corners' }, 0.01);
     const box = bounds(offset(badge, -3.175, 0.01))!;
@@ -236,6 +247,20 @@ describe('corner motifs', () => {
       const opened = offset(offset(poly, -2.9, 0.05), 2.9, 0.05);
       expect(area(opened) / area(poly), m.id).toBeGreaterThan(0.96);
     }
+  });
+
+  it('scales an uploaded motif by its own viewBox', () => {
+    const filled = (viewBox: string, d: string) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${viewBox}"><path d="${d}"/></svg>`;
+    for (const [viewBox, d] of [['0 0 512 512', 'M0 0H512V512H0Z'], ['0 0 24 24', 'M0 0H24V24H0Z'], ['10 10 20 20', 'M10 10H30V30H10Z']]) {
+      const b = bounds(motifPoly(filled(viewBox, d), 10, 0.01))!;
+      expect(b.x, viewBox).toBeCloseTo(0, 6);
+      expect(b.y, viewBox).toBeCloseTo(0, 6);
+      expect(b.w, viewBox).toBeCloseTo(10, 6);
+      expect(b.h, viewBox).toBeCloseTo(10, 6);
+    }
+    // A wide box scales by its longer side.
+    const wide = bounds(motifPoly(filled('0 0 48 24', 'M0 0H48V24H0Z'), 10, 0.01))!;
+    expect([wide.w, wide.h]).toEqual([10, 5]);
   });
 
   it('scales so the 100-unit box is the asked size', () => {

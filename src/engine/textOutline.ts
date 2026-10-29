@@ -70,11 +70,16 @@ export interface TextOutline {
   baselinesPx: number[];
 }
 
-/** The text's lines. */
-function textLines(config: TextConfig): string[] {
-  const lines = (config.text || 'TEXT').split(/\r?\n/).filter((l, idx, arr) => l.length > 0 || arr.length === 1);
-  return lines.length > 0 ? lines : ['TEXT'];
+/**
+ * The lines of a text, blank ones included: a blank line is drawn as nothing but still takes its
+ * line height, and empty text is one blank line. The stage splits text the same way, so its line
+ * numbers match the outline's.
+ */
+export function splitLines(text: string): string[] {
+  return text.split(/\r?\n/);
 }
+
+const textLines = (config: TextConfig): string[] => splitLines(config.text);
 
 /** A run of a line drawn from one font file: a subset file only has some characters. */
 interface Run {

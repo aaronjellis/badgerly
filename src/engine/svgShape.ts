@@ -109,6 +109,12 @@ function readViewBox(root: Attrs): Rect | null {
   return w && h ? { x: 0, y: 0, w, h } : null;
 }
 
+/** The viewBox an SVG document's root declares (else its plain width and height), or null. */
+export function svgViewBox(svgText: string): Rect | null {
+  const root = svgText.replace(/<!--[\s\S]*?-->/g, '').match(/<svg\b((?:"[^"]*"|'[^']*'|[^>"'])*)>/i);
+  return root ? readViewBox(parseAttrs(root[1])) : null;
+}
+
 /** Elements whose children are never drawn directly. */
 const NOT_RENDERED = new Set(['defs', 'clippath', 'mask', 'symbol', 'metadata', 'title', 'desc', 'pattern', 'marker', 'lineargradient', 'radialgradient', 'filter', 'foreignobject']);
 
@@ -126,8 +132,37 @@ interface Frame {
   skip: boolean;
 }
 
-function childFrame(parent: Frame, name: string, attrs: Attrs): Frame {
-  const props = { ...attrs, ...parseStyle(attrs.style) };
+/** Declarations by class name, from a stylesheet's rules whose selectors are plain classes (`.a`, `.a, .b`). */
+type ClassRules = Map<string, Attrs>;
+
+/** The simple class rules of every `<style>` block, as Illustrator and Inkscape write them; other rules are ignored. */
+function readClassRules(svgText: string): ClassRules {
+  const rules: ClassRules = new Map();
+  for (const block of svgText.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style\s*>/gi)) {
+    const css = block[1].replace(/<!\[CDATA\[|\]\]>/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+    for (const rule of css.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
+      const selectors = rule[1].split(',').map((sel) => sel.trim());
+      if (!selectors.every((sel) => /^\.[\w-]+$/.test(sel))) continue;
+      const decls = parseStyle(rule[2]);
+      for (const sel of selectors) rules.set(sel.slice(1), { ...rules.get(sel.slice(1)), ...decls });
+    }
+  }
+  return rules;
+}
+
+/** The declarations the element's classes give it, in the order the classes are listed. */
+function classProps(attrs: Attrs, rules: ClassRules): Attrs {
+  const out: Attrs = {};
+  for (const name of (attrs.class ?? '').split(/\s+/)) Object.assign(out, rules.get(name));
+  return out;
+}
+
+/** A paint that draws nothing. */
+const isNone = (paint: string) => paint === 'none' || paint === 'transparent';
+
+function childFrame(parent: Frame, name: string, attrs: Attrs, rules: ClassRules): Frame {
+  // A class rule beats a presentation attribute, and an inline style beats both, as in CSS.
+  const props = { ...attrs, ...classProps(attrs, rules), ...parseStyle(attrs.style) };
   const inherit = (value: string | undefined, fallback: string) => (value === undefined || value === 'inherit' ? fallback : value);
   return {
     name,
@@ -187,6 +222,7 @@ function shapePath(name: string, a: Attrs): string | null {
  * width and height.
  */
 export function parseSvgShape(svgText: string, tolMm: number): SvgShape | null {
+  const rules = readClassRules(svgText.replace(/<!--[\s\S]*?-->/g, ''));
   const text = svgText
     .replace(/<!--[\s\S]*?-->/g, '')
     .replace(/<!\[CDATA\[[\s\S]*?\]\]>/g, '')
@@ -204,9 +240,9 @@ export function parseSvgShape(svgText: string, tolMm: number): SvgShape | null {
   const draw = (name: string, attrs: Attrs, f: Frame) => {
     if (!FILLED.has(name) && !STROKED.has(name)) return;
     // A line has no interior, so its fill never matters.
-    const unfilled = name === 'line' || f.fill === 'none';
+    const unfilled = name === 'line' || isNone(f.fill);
     drawables++;
-    if (!(unfilled && f.stroke !== 'none')) allStroked = false;
+    if (!(unfilled && !isNone(f.stroke))) allStroked = false;
     // A polyline is ignored for area, like a line.
     const pathData = FILLED.has(name) ? shapePath(name, attrs) : null;
     if (unfilled || pathData === null) return;
@@ -235,11 +271,11 @@ export function parseSvgShape(svgText: string, tolMm: number): SvgShape | null {
       viewBox = readViewBox(attrs);
       if (!viewBox) return null;
       const root: Frame = { name, matrix: IDENTITY, fill: 'black', stroke: 'none', rule: FillRule.NonZero, skip: false };
-      stack = [childFrame(root, name, attrs)];
+      stack = [childFrame(root, name, attrs, rules)];
       if (selfClosing) break;
       continue;
     }
-    const frame = childFrame(stack[stack.length - 1], name, attrs);
+    const frame = childFrame(stack[stack.length - 1], name, attrs, rules);
     if (!frame.skip) draw(name, attrs, frame);
     if (!selfClosing) stack.push(frame);
   }

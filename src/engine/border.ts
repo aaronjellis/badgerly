@@ -72,6 +72,8 @@ export interface BorderGeometry {
 const MAX_SCORE_WIDTH_MM = 0.5;
 /** How far a corner run stops short of its motif, so the line never touches the art. */
 const MOTIF_CLEARANCE_MM = 1;
+/** A corner run shorter than this between two motifs is a speck, not a line, so it is left out. */
+const MIN_RUN_MM = 1;
 
 export function scoresBorder(border: BorderConfig): boolean {
   return (border.style === 'single' || border.style === 'dashed' || border.style === 'corners') && border.widthMm <= MAX_SCORE_WIDTH_MM;
@@ -287,7 +289,7 @@ export function buildBorder(outline: Poly, border: BorderConfig, tolMm: number):
       // A motif that fits nowhere means the badge is too small for the art: report it, draw nothing.
       if (!placed) return nothing(border, true);
       const { ornaments, squares } = placed;
-      const runs = center.flatMap((contour) => cutLoop(contour, squares));
+      const runs = center.flatMap((contour) => cutLoop(contour, squares)).filter((run) => pathLength(run, false) >= MIN_RUN_MM);
       return {
         bands: union(runs.map((run) => offsetOpen(run, widthMm / 2, tolMm))),
         centerlines: runs,

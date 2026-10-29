@@ -9,7 +9,9 @@ export interface FontProvider {
   get(config: TextConfig): TextFont[] | null;
   /** Fetches the config's fonts (once at a time per font); null if they can't be had. */
   load(config: TextConfig): Promise<TextFont[] | null>;
-  /** Calls `cb` whenever a load adds fonts; returns the function that stops it. */
+  /** Whether the config's last load came back with nothing, so `get` will stay null until a load succeeds. */
+  failed(config: TextConfig): boolean;
+  /** Calls `cb` whenever a load adds fonts or fails; returns the function that stops it. */
   onChange(cb: () => void): () => void;
 }
 
@@ -39,6 +41,10 @@ export function createFontProvider(): FontProvider {
   /** Fontsource's listing per family, once a load has fetched it; `get` needs it to build the key. */
   const metas = new Map<string, FontsourceMeta>();
   const listeners = new Set<() => void>();
+  /** Families whose listing could not be had, and font keys whose files could not: what `failed` reports. */
+  const failedFamilies = new Set<string>();
+  const failedKeys = new Set<string>();
+  const notify = () => listeners.forEach((cb) => cb());
 
   return {
     get(config) {
@@ -48,7 +54,12 @@ export function createFontProvider(): FontProvider {
 
     async load(config) {
       const meta = await fetchFontMeta(config.family);
-      if (!meta) return null;
+      if (!meta) {
+        failedFamilies.add(config.family);
+        notify();
+        return null;
+      }
+      failedFamilies.delete(config.family);
       metas.set(config.family, meta);
       const { key, weight, style } = cacheKey(meta, config);
       const cached = fonts.get(key);
@@ -59,13 +70,21 @@ export function createFontProvider(): FontProvider {
           inFlight.delete(key);
           if (loaded) {
             fonts.set(key, loaded);
-            listeners.forEach((cb) => cb());
+            failedKeys.delete(key);
+          } else {
+            failedKeys.add(key);
           }
+          notify();
           return loaded;
         });
         inFlight.set(key, pending);
       }
       return pending;
+    },
+
+    failed(config) {
+      const meta = metas.get(config.family);
+      return meta ? failedKeys.has(cacheKey(meta, config).key) : failedFamilies.has(config.family);
     },
 
     onChange(cb) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addPairEm, alongText, anchoredCenter, fallbackInk, kerningDeltaEm, kerningHandles, pieceSlots, round2, scaleFactor } from '../src/ui/stageMath';
+import { addPairEm, alongText, anchoredCenter, fallbackInk, kerningDeltaEm, kerningHandles, round2, scaleFactor, textLines } from '../src/ui/stageMath';
 import { defaultProject } from '../src/engine/model';
 import type { TextElement } from '../src/engine/model';
 
@@ -30,18 +30,11 @@ describe('fallbackInk', () => {
   });
 });
 
-describe('pieceSlots', () => {
-  it('lays pieces left to right with the gap between their bounds', () => {
-    const { dx, bounds } = pieceSlots(
-      [{ x: -20, y: -5, w: 40, h: 10 }, null, { x: -10, y: -8, w: 20, h: 16 }],
-      5
-    );
-    expect(dx).toEqual([20, 0, 55]);
-    expect(bounds).toEqual({ x: 0, y: -8, w: 40 + 5 + 20, h: 16 });
-  });
-
-  it('has no bounds when nothing is placed', () => {
-    expect(pieceSlots([null], 5).bounds).toBeNull();
+describe('textLines', () => {
+  it('splits as the outline does: blank lines kept, no placeholder for empty text', () => {
+    const el = defaultProject().elements[0] as TextElement;
+    expect(textLines({ ...el, text: { ...el.text, text: 'A\n\nB' } })).toEqual(['A', '', 'B']);
+    expect(textLines({ ...el, text: { ...el.text, text: '' } })).toEqual(['']);
   });
 });
 

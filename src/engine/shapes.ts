@@ -58,7 +58,14 @@ const MIN_FEATURE_MM = 0.05;
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
-/** Limits every size to what the shape can draw: a corner to half the short side, a scallop or depth to a quarter. */
+/** The largest a secondary size may be on a badge whose short side is `shortMm`: a corner half of it, a scallop or depth a quarter; the hug has no limit. */
+export function secondaryMax(use: ShapeOption['uses'][number], shortMm: number): number {
+  if (use === 'corner') return shortMm / 2;
+  if (use === 'hug') return Infinity;
+  return shortMm / 4;
+}
+
+/** Limits every size to what the shape can draw: each secondary size to its `secondaryMax`. */
 export function clampShape(shape: ShapeConfig): ShapeConfig {
   const widthMm = Math.max(MIN_SIDE_MM, shape.widthMm);
   const heightMm = Math.max(MIN_SIDE_MM, shape.heightMm);
@@ -67,10 +74,10 @@ export function clampShape(shape: ShapeConfig): ShapeConfig {
     ...shape,
     widthMm,
     heightMm,
-    cornerMm: clamp(shape.cornerMm, 0, short / 2),
-    scallopMm: clamp(shape.scallopMm, 0, short / 4),
-    depthMm: clamp(shape.depthMm, 0, short / 4),
-    hugMm: Math.max(0, shape.hugMm),
+    cornerMm: clamp(shape.cornerMm, 0, secondaryMax('corner', short)),
+    scallopMm: clamp(shape.scallopMm, 0, secondaryMax('scallop', short)),
+    depthMm: clamp(shape.depthMm, 0, secondaryMax('depth', short)),
+    hugMm: clamp(shape.hugMm, 0, secondaryMax('hug', short)),
   };
 }
 

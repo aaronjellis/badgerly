@@ -8,9 +8,11 @@
  */
 import { bounds, difference, polyToSvgPath, rotate, translate, union } from './geom';
 import type { Poly, Pt, Rect } from './geom';
+import { svgTextFromDataUrl } from './artworkImage';
 import { scoresBorder } from './border';
 import type { BadgeElement, BadgeProject, GraphicElement, TextElement } from './model';
 import type { ResolvedBadge } from './resolve';
+import { inlineSvgArtwork } from './svgInline';
 
 export const CUT = '#ff0000';
 export const SCORE = '#0000ff';
@@ -18,8 +20,8 @@ export const ENGRAVE = '#000000';
 
 /** The margin around the layout, in mm. */
 const MARGIN_MM = 1;
-/** The gap between pieces laid side by side, in mm. */
-const GAP_MM = 5;
+/** The gap between pieces laid side by side, in mm; the stage's layout view uses the same. */
+export const STACK_GAP_MM = 5;
 /** Stroke width for cut and score lines, in mm: a hairline that laser software replaces with its own. */
 const STROKE_MM = 0.1;
 
@@ -31,7 +33,8 @@ export interface SvgPiece {
   /** Whether every score line is a closed loop; an open line (a dash or a corner run) is not closed. */
   scoreClosed: boolean;
   engrave: Poly;
-  print: { el: GraphicElement | TextElement; poly: Poly; fill: string }[];
+  /** Printed elements: text in its fill, a vector graphic in its own colors, drawn in its ink `box`. */
+  print: { el: GraphicElement | TextElement; poly: Poly; fill: string; box: Rect }[];
   /** Raster elements and the boxes they fill; each goes in the print group when `isPrinted`, else in engrave. */
   images: { el: GraphicElement; box: Rect }[];
 }
@@ -75,7 +78,8 @@ function stackedPieces(project: BadgeProject, resolved: ResolvedBadge): SvgPiece
     let id = base;
     for (let n = 2; used.has(id); n++) id = `${base}-${n}`;
     used.add(id);
-    // A lone element is already a clean outline; a union would only snap it to the clipper grid.
+    // A lone element can skip the union: resolve has already merged each element into one clean outline (text
+    // through `mergeContours`, an SVG through `union(regions)`), so a union would only snap it to the Clipper grid.
     topPieces.push({ id, cut: polys.length === 1 ? polys[0] : union(polys), score: [], scoreClosed: true, engrave: [], print: [], images: [] });
   });
 
@@ -108,7 +112,7 @@ function badgePiece(project: BadgeProject, resolved: ResolvedBadge, id: string, 
     if (r.poly.length === 0) continue;
     if (el.role.laser === 'cutout') cutouts.push(r.poly);
     else if (el.role.laser === 'score') scoreContours.push(...r.poly);
-    else if (isPrinted(project, el)) print.push({ el, poly: r.poly, fill: el.role.fill });
+    else if (isPrinted(project, el)) print.push({ el, poly: r.poly, fill: el.role.fill, box: r.ink });
     else engraves.push(r.poly);
   }
 
@@ -184,34 +188,45 @@ function pieceGroup(project: BadgeProject, piece: SvgPiece, dx: number, dy: numb
     ...(piece.engrave.length > 0 ? [fill(polyToSvgPath(translate(piece.engrave, dx, dy)), ENGRAVE)] : []),
     ...engraved.map(image),
   ]);
-  group('print', [
-    ...piece.print.map((p) => fill(polyToSvgPath(translate(p.poly, dx, dy)), p.fill)),
-    ...printed.map(image),
-  ]);
+  // A printed vector graphic keeps its own colors: its markup goes in, placed in its ink box, rather than its outline in one fill.
+  const printItem = ({ el, poly, fill: color, box }: SvgPiece['print'][number]) => {
+    const svg = el.kind === 'graphic' ? svgTextFromDataUrl(el.dataUrl) : null;
+    const art = svg && inlineSvgArtwork(svg, `${id}-${el.id}-`, { ...box, x: box.x + dx, y: box.y + dy }, el.rotationDeg);
+    return art ?? fill(polyToSvgPath(translate(poly, dx, dy)), color);
+  };
+  group('print', [...piece.print.map(printItem), ...printed.map(image)]);
   return `<g id="${id}">\n${parts.join('\n')}\n</g>`;
+}
+
+/**
+ * Where the layout puts each piece: left to right with `gapMm` between their bounds, each keeping its own
+ * badge coordinates vertically, the first starting at x = 0. `dx[i]` moves piece i; `bounds` is the whole
+ * layout, null when nothing is placed. The export adds its margin; the stage's layout view draws it as is.
+ */
+export function pieceSlots(rects: (Rect | null)[], gapMm = STACK_GAP_MM): { dx: number[]; bounds: Rect | null } {
+  let cursor = 0;
+  let top = Infinity;
+  let bottom = -Infinity;
+  const dx = rects.map((b) => {
+    if (!b) return 0;
+    const shift = cursor - b.x;
+    cursor += b.w + gapMm;
+    top = Math.min(top, b.y);
+    bottom = Math.max(bottom, b.y + b.h);
+    return shift;
+  });
+  const placed = rects.some((b) => b !== null);
+  return { dx, bounds: placed ? { x: 0, y: top, w: cursor - gapMm, h: bottom - top } : null };
 }
 
 /** The SVG for the project's laser variant: 1:1 in mm, a 1 mm margin, one group per operation on each piece. */
 export function exportLaserSvg(project: BadgeProject, resolved: ResolvedBadge): string {
   const pieces = laserPieces(project, resolved);
-  // Pieces sit left to right with a gap between their bounds. Each keeps its own badge coordinates and is
-  // shifted into its slot; they share one top edge, so the layout's top-left lands at the margin.
-  const rects = pieces.map(pieceBounds);
-  const top = Math.min(...rects.filter((b): b is Rect => b !== null).map((b) => b.y));
-  const dy = MARGIN_MM - top;
-  let cursor = MARGIN_MM;
-  const slots = rects.map((b) => {
-    if (!b) return 0;
-    const dx = cursor - b.x;
-    cursor += b.w + GAP_MM;
-    return dx;
-  });
-  const bottom = Math.max(...rects.filter((b): b is Rect => b !== null).map((b) => b.y + b.h));
-  const empty = rects.every((b) => b === null);
-  const width = empty ? 0 : cursor - GAP_MM - MARGIN_MM;
-  const height = empty ? 0 : bottom - top;
-  const w = ceilTenth(width + 2 * MARGIN_MM).toFixed(1);
-  const h = ceilTenth(height + 2 * MARGIN_MM).toFixed(1);
-  const body = pieces.map((piece, i) => pieceGroup(project, piece, slots[i], dy)).join('\n');
+  // Pieces sit in their slots; they share one top edge, so the layout's top-left lands at the margin.
+  const { dx, bounds: layout } = pieceSlots(pieces.map(pieceBounds));
+  const dy = MARGIN_MM - (layout?.y ?? 0);
+  const w = ceilTenth((layout?.w ?? 0) + 2 * MARGIN_MM).toFixed(1);
+  const h = ceilTenth((layout?.h ?? 0) + 2 * MARGIN_MM).toFixed(1);
+  const body = pieces.map((piece, i) => pieceGroup(project, piece, dx[i] + MARGIN_MM, dy)).join('\n');
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}mm" height="${h}mm" viewBox="0 0 ${w} ${h}">\n${body}\n</svg>\n`;
 }

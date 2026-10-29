@@ -129,6 +129,12 @@ describe('resolveBadge', () => {
     expect(r.elements).toEqual([]);
     expect(r.warnings).toEqual([expect.objectContaining({ code: 'fontLoading', elementId: p.elements[0].id })]);
   });
+  it('says the font could not be loaded once its load has failed', () => {
+    const p = defaultProject();
+    const r = resolveBadge(p, fakeProvider(null, true), 0.05);
+    expect(r.elements).toEqual([]);
+    expect(r.warnings).toEqual([{ code: 'missingFont', elementId: p.elements[0].id, message: 'The font could not be loaded.' }]);
+  });
   it('rotates text about its center but keeps the unrotated ink box', () => {
     const p = defaultProject(); p.elements[0].x = 3; p.elements[0].y = 2;
     const flat = resolveBadge(p, cinzel(), 0.05).elements[0];
@@ -192,5 +198,15 @@ describe('resolveBadge', () => {
   it('raises no outside-flat warning in laser mode', () => {
     const p = defaultProject(); p.elements[0].x = 48;
     expect(resolveBadge(p, cinzel(), 0.05).warnings.some((w) => w.code === 'outsideFlat')).toBe(false);
+  });
+  it('warns in laser mode when an element runs past the badge edge', () => {
+    const p = defaultProject(); p.elements[0].x = 48;
+    expect(resolveBadge(p, cinzel(), 0.05).warnings).toEqual([
+      { code: 'outsideBadge', elementId: p.elements[0].id, message: 'Text runs past the badge edge.' },
+    ]);
+    p.elements[0].x = 0;
+    expect(resolveBadge(p, cinzel(), 0.05).warnings).toEqual([]);
+    p.elements[0].x = 48; p.mode = 'print3d';
+    expect(resolveBadge(p, cinzel(), 0.05).warnings.map((w) => w.code)).toEqual(['outsideFlat']);
   });
 });

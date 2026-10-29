@@ -336,4 +336,26 @@ describe('parseSvgShape', () => {
       expect(area(s.poly)).toBeCloseTo(100, 6);
     });
   });
+  describe('class rules', () => {
+    it('reads Illustrator-style line art as stroke only', () => {
+      const s = parse(
+        '<defs><style><![CDATA[.cls-1{fill:none;stroke:#000;stroke-miterlimit:10;}]]></style></defs>' +
+          '<path class="cls-1" d="M10 10H90V90H10Z"/><circle class="cls-1" cx="50" cy="50" r="20"/>'
+      );
+      expect(s.strokeOnly).toBe(true);
+      expect(s.poly).toEqual([]);
+    });
+    it('applies fill and display from class rules, with inline styles winning', () => {
+      const style = '<style>.a, .b { fill: #f00 } .hide{display:none}.none{fill:none}</style>';
+      expect(area(parse(`${style}<rect class="b" width="10" height="10" fill="none"/>`).poly)).toBeCloseTo(100, 6);
+      expect(parse(`${style}<rect class="hide" width="10" height="10"/>`).poly).toEqual([]);
+      expect(area(parse(`${style}<rect class="none" style="fill:#000" width="10" height="10"/>`).poly)).toBeCloseTo(100, 6);
+      expect(parse(`${style}<g class="none"><rect width="10" height="10"/></g>`).poly).toEqual([]);
+    });
+    it('treats a transparent fill as none', () => {
+      const s = parse('<rect width="10" height="10" fill="transparent" stroke="#000"/>');
+      expect(s.poly).toEqual([]);
+      expect(s.strokeOnly).toBe(true);
+    });
+  });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { harfbuzzFont } from '../src/engine/hbFont';
-import { DEFAULT_TEXT, buildTextOutline, capHeightPx, missingChar, type TextFont } from '../src/engine/textOutline';
+import { DEFAULT_TEXT, buildTextOutline, capHeightPx, missingChar, splitLines, type TextFont } from '../src/engine/textOutline';
 import { outerCount } from '../src/engine/geom';
 
 // Real Google Fonts, as Fontsource serves them (latin subset TTFs, OFL-licensed).
@@ -47,6 +47,23 @@ describe('text outline', () => {
     expect(o.lines).toBe(2);
     expect(o.clusters.filter((c) => c.line === 1)).toHaveLength(2);
     expect(o.ink.h).toBeGreaterThan(150);
+  });
+  it('a blank line still takes its line height', () => {
+    const cinzel = [font('cinzel-700-normal')];
+    const two = buildTextOutline({ ...DEFAULT_TEXT, text: 'AB\nCD', letterSpacingEm: 0 }, cinzel, 0.05);
+    const gap = buildTextOutline({ ...DEFAULT_TEXT, text: 'AB\n\nCD', letterSpacingEm: 0 }, cinzel, 0.05);
+    expect(gap.lines).toBe(3);
+    expect(gap.ink.h - two.ink.h).toBeCloseTo(DEFAULT_TEXT.lineHeight * 100, 0);
+    expect(gap.clusters.filter((c) => c.line === 2)).toHaveLength(2);
+  });
+  it('empty text draws nothing', () => {
+    const o = buildTextOutline({ ...DEFAULT_TEXT, text: '' }, [font('cinzel-700-normal')], 0.05);
+    expect(o.poly).toEqual([]);
+    expect(o.clusters).toEqual([]);
+  });
+  it('splitLines keeps blank lines and reads CRLF', () => {
+    expect(splitLines('A\r\n\nB')).toEqual(['A', '', 'B']);
+    expect(splitLines('')).toEqual(['']);
   });
   it('reports a missing character', () => {
     expect(missingChar({ ...DEFAULT_TEXT, text: 'A😀' }, [font('cinzel-700-normal')])).toBe('😀');

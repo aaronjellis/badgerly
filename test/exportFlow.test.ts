@@ -104,7 +104,7 @@ describe('exportBadge', () => {
       loaded = true;
       return [font('cinzel-700-normal')];
     });
-    const fonts = { get: () => (loaded ? [font('cinzel-700-normal')] : null), load, onChange: () => () => {} };
+    const fonts = { get: () => (loaded ? [font('cinzel-700-normal')] : null), load, failed: () => false, onChange: () => () => {} };
     const { outcome, saved } = await run('svg', p, fonts);
     expect(load).toHaveBeenCalledTimes(1);
     expect(outcome.ok).toBe(true);
@@ -112,6 +112,13 @@ describe('exportBadge', () => {
   });
 
   it('refuses with the warning when a font will not load, and downloads nothing', async () => {
+    const { outcome, saved } = await run('svg', defaultProject(), fakeProvider(null, true));
+    expect(outcome.ok).toBe(false);
+    expect(outcome.message).toBe('The font could not be loaded.');
+    expect(saved).toEqual([]);
+  });
+
+  it('refuses while a font is still loading', async () => {
     const { outcome, saved } = await run('svg', defaultProject(), fakeProvider(null));
     expect(outcome.ok).toBe(false);
     expect(outcome.message).toMatch(/still loading/i);

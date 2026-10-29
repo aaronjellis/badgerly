@@ -1,6 +1,6 @@
 import { clampBorder, DEFAULT_BORDER } from './border';
 import type { BorderConfig, BorderStyle } from './border';
-import { BACKING_ID, DEFAULT_RELIEF, DEFAULT_ROLE, defaultBackingLayer, defaultLayers, defaultProject } from './model';
+import { BACKING_ID, DEFAULT_RELIEF, DEFAULT_ROLE, defaultBackingLayer, defaultLayers, defaultProject, newId } from './model';
 import type { BadgeElement, BadgeProject, ElementRole, Layer, ReliefConfig } from './model';
 import { clampShape, DEFAULT_SHAPE, SHAPE_OPTIONS } from './shapes';
 import type { ShapeConfig } from './shapes';
@@ -45,6 +45,16 @@ function mergeScalars<T extends object>(defaults: T, raw: unknown): T {
   return out as T;
 }
 
+/**
+ * `parsed` with each of `sizes` that is not above zero, and each of `lengths` that is below zero,
+ * put back to its default: a file's zero line width or negative plate is not a badge.
+ */
+function keepSizes<T extends object>(parsed: T, defaults: T, sizes: (keyof T)[], lengths: (keyof T)[] = []): T {
+  for (const key of sizes) if (!isSize(parsed[key])) parsed[key] = defaults[key];
+  for (const key of lengths) if (!(isNum(parsed[key]) && (parsed[key] as number) >= 0)) parsed[key] = defaults[key];
+  return parsed;
+}
+
 const SHAPE_KINDS = SHAPE_OPTIONS.map((o) => o.kind);
 const BORDER_STYLES: BorderStyle[] = ['none', 'single', 'double', 'dashed', 'corners'];
 
@@ -60,14 +70,14 @@ function parseBorder(raw: unknown): BorderConfig {
   border.style = oneOf(r.style, BORDER_STYLES, DEFAULT_BORDER.style);
   border.relief = oneOf(r.relief, ['emboss', 'deboss'], DEFAULT_BORDER.relief);
   if (isStr(r.motifSvg)) border.motifSvg = r.motifSvg;
-  return border;
+  return keepSizes(border, DEFAULT_BORDER, ['widthMm', 'gapMm', 'dashMm', 'dashGapMm', 'motifSizeMm', 'reliefMm'], ['insetMm']);
 }
 
 function parseRelief(raw: unknown): ReliefConfig {
   const relief = mergeScalars(DEFAULT_RELIEF, raw);
   const r = isRecord(raw) ? raw : {};
   relief.edge = oneOf(r.edge, ['none', 'chamfer', 'fillet'], DEFAULT_RELIEF.edge);
-  return relief;
+  return keepSizes(relief, DEFAULT_RELIEF, ['plateMm', 'edgeMm', 'recessMm'], ['clearanceMm']);
 }
 
 /** Keeps valid layers, puts the backing first, and adds one when the file has none. */
@@ -93,7 +103,7 @@ function parseRole(raw: unknown, layerIds: Set<string>): ElementRole {
     // Null is the one way to say "on the backing".
     layerId: isStr(r.layerId) && r.layerId !== BACKING_ID && layerIds.has(r.layerId) ? r.layerId : null,
     relief: oneOf(r.relief, ['emboss', 'deboss'], DEFAULT_ROLE.relief),
-    reliefMm: isNum(r.reliefMm) ? r.reliefMm : DEFAULT_ROLE.reliefMm,
+    reliefMm: isSize(r.reliefMm) ? r.reliefMm : DEFAULT_ROLE.reliefMm,
   };
 }
 
@@ -103,8 +113,9 @@ function parseTextConfig(raw: unknown): TextConfig | null {
   const text = mergeScalars(DEFAULT_TEXT, raw);
   text.style = oneOf(raw.style, ['normal', 'italic'], DEFAULT_TEXT.style);
   text.align = oneOf(raw.align, ['left', 'center', 'right'], DEFAULT_TEXT.align);
+  // A pair key is "line:index"; anything else could never name a pair.
   text.pairAdjustEm = isRecord(raw.pairAdjustEm)
-    ? Object.fromEntries(Object.entries(raw.pairAdjustEm).filter((e): e is [string, number] => isNum(e[1])))
+    ? Object.fromEntries(Object.entries(raw.pairAdjustEm).filter((e): e is [string, number] => /^\d+:\d+$/.test(e[0]) && isNum(e[1])))
     : {};
   return text;
 }
@@ -125,7 +136,8 @@ function parseElement(raw: unknown, layerIds: Set<string>): BadgeElement | null 
     return { ...base, kind: 'text', name: isStr(raw.name) ? raw.name : 'Text', text, capHeightMm: raw.capHeightMm };
   }
   if (raw.kind === 'graphic') {
-    if (!isStr(raw.dataUrl) || !isSize(raw.widthMm) || !isSize(raw.heightMm)) return null;
+    // Only an image data URL draws here; anything else (a web address, a script) is not kept.
+    if (!isStr(raw.dataUrl) || !raw.dataUrl.startsWith('data:image/') || !isSize(raw.widthMm) || !isSize(raw.heightMm)) return null;
     return {
       ...base,
       kind: 'graphic',
@@ -137,6 +149,17 @@ function parseElement(raw: unknown, layerIds: Set<string>): BadgeElement | null 
     };
   }
   return null;
+}
+
+/** The elements with every id used once: the first keeps it, a later one gets a new id, so selecting one never selects two. */
+function uniqueIds(elements: BadgeElement[]): BadgeElement[] {
+  const seen = new Set<string>();
+  return elements.map((el) => {
+    let id = el.id;
+    while (seen.has(id)) id = newId();
+    seen.add(id);
+    return id === el.id ? el : { ...el, id };
+  });
 }
 
 /**
@@ -154,7 +177,10 @@ export function parseProject(text: string): BadgeProject {
   if (!isRecord(raw) || raw.format !== FORMAT) {
     throw new ProjectFileError('This file isn’t a Badgerly project.');
   }
-  if (typeof raw.version !== 'number' || raw.version > VERSION) {
+  if (typeof raw.version !== 'number') {
+    throw new ProjectFileError('This file isn’t a Badgerly project.');
+  }
+  if (raw.version > VERSION) {
     throw new ProjectFileError('This project was saved by a newer Badgerly. Reload the page to update, then open it again.');
   }
 
@@ -162,7 +188,7 @@ export function parseProject(text: string): BadgeProject {
   const layers = parseLayers(raw.layers);
   const layerIds = new Set(layers.map((l) => l.id));
   const elements = Array.isArray(raw.elements)
-    ? (raw.elements as unknown[]).flatMap((e) => parseElement(e, layerIds) ?? [])
+    ? uniqueIds((raw.elements as unknown[]).flatMap((e) => parseElement(e, layerIds) ?? []))
     : defaults.elements;
 
   const shape = parseShape(raw.shape);

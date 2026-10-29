@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { exportLaserSvg, laserPieces } from '../src/engine/laserExport';
+import { exportLaserSvg, laserPieces, pieceSlots, STACK_GAP_MM } from '../src/engine/laserExport';
 import { area, bounds } from '../src/engine/geom';
 import { defaultProject, DEFAULT_ROLE, newId } from '../src/engine/model';
 import type { BadgeProject, GraphicElement } from '../src/engine/model';
 import { resolveBadge } from '../src/engine/resolve';
+import { inlineSvgArtwork, sanitize } from '../src/engine/svgInline';
 import { fakeProvider, font } from './helpers/fonts';
 
 const resolve = (p: BadgeProject) => resolveBadge(p, fakeProvider([font('cinzel-700-normal')]), 0.01);
@@ -56,6 +57,18 @@ describe('exportLaserSvg', () => {
     const svg = exportLaserSvg(p, resolve(p));
     expect(svg).toMatch(/<g id="badge-print">[\s\S]*fill="#1e40af"/);
     expect(svg).not.toContain('id="badge-engrave"');
+  });
+
+  it('print and cut prints a vector graphic in its own colors, placed in its ink box', () => {
+    const art = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 10"><rect width="10" height="10" fill="#ff0000"/><rect x="10" width="10" height="10" fill="#00ff00"/></svg>';
+    const p = defaultProject(); p.laserVariant = 'printcut';
+    p.elements.push(raster({ id: 'flag', x: 0, y: 0, rotationDeg: 0, vector: true, widthMm: 20, heightMm: 10, dataUrl: `data:image/svg+xml,${encodeURIComponent(art)}`, role: { ...DEFAULT_ROLE, printColor: true, fill: '#123456' } }));
+    const svg = exportLaserSvg(p, resolve(p));
+    const print = svg.match(/<g id="badge-print">[\s\S]*?\n<\/g>/)![0];
+    expect(print).toContain('fill="#ff0000"');
+    expect(print).toContain('fill="#00ff00"');
+    expect(print).not.toContain('#123456');
+    expect(print).toContain('<g id="badge-flag-art" transform="translate(');
   });
 
   it('single material ignores the print color', () => {
@@ -243,5 +256,40 @@ describe('exportLaserSvg', () => {
       expect(svg).toContain('<g id="backing">');
       expect(svg).toContain('<g id="layer-acrylic">');
     });
+  });
+});
+
+describe('inline artwork', () => {
+  const box = { x: 0, y: 0, w: 10, h: 10 };
+  it('removes javascript: and outside links, scripts, animations, and handlers', () => {
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" onload="alert(1)">' +
+      '<a href="javascript:alert(1)"><rect width="5" height="5" onclick="alert(2)"/></a>' +
+      '<image xlink:href="https://example.com/x.png" width="1" height="1"/><use href="#r"/>' +
+      '<script>alert(3)</script><foreignObject><div/></foreignObject>' +
+      '<animate attributeName="x" to="5"/><set attributeName="fill" to="red"></set><animateTransform type="rotate"/>' +
+      '<rect id="r" style="fill:url(https://example.com/p.svg#g)" width="1" height="1"/></svg>';
+    const out = inlineSvgArtwork(svg, 'p-', box, 0)!;
+    expect(out).not.toMatch(/javascript|alert|example\.com|<script|<foreignObject|<animate|<set|onload|onclick/i);
+    expect(out).toContain('href="#p-r"');
+    expect(out).toContain('<rect width="5" height="5"/>');
+  });
+  it('keeps links to the drawing itself and embedded images', () => {
+    const kept = sanitize('<image href="data:image/png;base64,AAAA"/><rect fill="url(#g)"/>');
+    expect(kept).toBe('<image href="data:image/png;base64,AAAA"/><rect fill="url(#g)"/>');
+  });
+});
+
+describe('pieceSlots', () => {
+  it('lays pieces left to right with the gap between their bounds', () => {
+    const { dx, bounds } = pieceSlots(
+      [{ x: -20, y: -5, w: 40, h: 10 }, null, { x: -10, y: -8, w: 20, h: 16 }],
+      STACK_GAP_MM
+    );
+    expect(dx).toEqual([20, 0, 55]);
+    expect(bounds).toEqual({ x: 0, y: -8, w: 40 + STACK_GAP_MM + 20, h: 16 });
+  });
+
+  it('has no bounds when nothing is placed', () => {
+    expect(pieceSlots([null]).bounds).toBeNull();
   });
 });

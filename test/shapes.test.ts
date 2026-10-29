@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { area, bounds, outerCount } from '../src/engine/geom';
-import { DEFAULT_SHAPE, SHAPE_OPTIONS, buildShape, clampShape } from '../src/engine/shapes';
+import { DEFAULT_SHAPE, SHAPE_OPTIONS, buildShape, clampShape, secondaryMax } from '../src/engine/shapes';
 import type { ShapeConfig, ShapeKind } from '../src/engine/shapes';
 
 const solid = SHAPE_OPTIONS.filter((o) => o.kind !== 'hugText').map((o) => o.kind);
@@ -102,6 +102,13 @@ describe('shapes', () => {
   });
 
   describe('clampShape', () => {
+    it('holds each secondary size to secondaryMax, the limit the Shape section shows', () => {
+      const c = clampShape({ ...DEFAULT_SHAPE, cornerMm: 99, scallopMm: 99, depthMm: 99, hugMm: 99 });
+      const short = Math.min(c.widthMm, c.heightMm);
+      expect([c.cornerMm, c.scallopMm, c.depthMm]).toEqual([secondaryMax('corner', short), secondaryMax('scallop', short), secondaryMax('depth', short)]);
+      expect(c.hugMm).toBe(99);
+      expect(secondaryMax('hug', short)).toBe(Infinity);
+    });
     it('limits a corner larger than half the short side', () => {
       expect(clampShape({ ...DEFAULT_SHAPE, cornerMm: 60 }).cornerMm).toBe(25.4);
       const poly = buildShape(clampShape({ ...DEFAULT_SHAPE, cornerMm: 60 }), 0.01);

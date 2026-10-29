@@ -20,7 +20,7 @@ import type { TextOutline } from './textOutline';
 
 export type WarningCode =
   | 'missingFont' | 'fontLoading' | 'strokeOnlySvg' | 'islands' | 'bridged'
-  | 'borderTooDeep' | 'outsideFlat' | 'floatingCounter' | 'noElements' | 'thin';
+  | 'borderTooDeep' | 'outsideFlat' | 'outsideBadge' | 'floatingCounter' | 'noElements' | 'thin';
 
 export interface Warning {
   code: WarningCode;
@@ -116,7 +116,9 @@ function svgFor(el: GraphicElement, tolMm: number): SvgShape | null {
 function resolveText(el: TextElement, fonts: FontProvider, tolMm: number, warn: (w: Warning) => void): ResolvedElement | null {
   const set = fonts.get(el.text);
   if (!set || set.length === 0) {
-    warn({ code: 'fontLoading', elementId: el.id, message: `${el.text.family} is still loading.` });
+    warn(fonts.failed(el.text)
+      ? { code: 'missingFont', elementId: el.id, message: 'The font could not be loaded.' }
+      : { code: 'fontLoading', elementId: el.id, message: `${el.text.family} is still loading.` });
     return null;
   }
   const ch = missingChar(el.text, set);
@@ -185,6 +187,10 @@ export function resolveBadge(project: BadgeProject, fonts: FontProvider, tolMm: 
     const el = byId.get(e.id)!;
     if (project.mode === 'print3d' && !contains(flat, e.poly)) {
       warnings.push({ code: 'outsideFlat', elementId: e.id, message: `${el.name} runs onto the badge's edge. Move it inward.` });
+    }
+    // The laser cuts the outline, so what lies past it is lost or cut through.
+    if (project.mode === 'laser' && !contains(outline, e.poly)) {
+      warnings.push({ code: 'outsideBadge', elementId: e.id, message: `${el.name} runs past the badge edge.` });
     }
     if (project.mode === 'laser' && el.role.laser === 'cutout' && outerCount(difference(outline, e.poly)) > 1) {
       warnings.push({ code: 'floatingCounter', elementId: e.id, message: `Cutting out ${el.name} leaves loose pieces, such as the middle of an O.` });

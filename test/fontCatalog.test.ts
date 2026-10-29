@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CATALOG_URL, FALLBACK_FAMILIES, fetchFontCatalog, parseCatalog } from '../src/engine/fontCatalog';
 import { createFontProvider } from '../src/engine/fontProvider';
-import { loadGoogleFont, loadPreviewCss } from '../src/engine/googleFonts';
+import { loadPreviewCss } from '../src/engine/googleFonts';
 import { DEFAULT_TEXT, type TextConfig } from '../src/engine/textOutline';
 
 const KEY = 'badgerly.fontCatalog.v1';
@@ -117,9 +117,8 @@ describe('FALLBACK_FAMILIES', () => {
 });
 
 describe('without a document', () => {
-  it('loadPreviewCss and loadGoogleFont resolve without touching the page', async () => {
+  it('loadPreviewCss resolves without touching the page', async () => {
     await expect(loadPreviewCss(['Cinzel'])).resolves.toBeUndefined();
-    await expect(loadGoogleFont('Cinzel', 400, 'normal')).resolves.toBeUndefined();
   });
 });
 
@@ -183,13 +182,35 @@ describe('createFontProvider', () => {
     expect(cb).not.toHaveBeenCalled();
   });
 
-  it('resolves to null and caches nothing when the font is unavailable', async () => {
+  it('resolves to null, caches nothing, and reports the failure when the font is unavailable', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false })));
     const provider = createFontProvider();
     const cb = vi.fn();
     provider.onChange(cb);
-    expect(await provider.load({ ...config, family: 'No Such Font' })).toBeNull();
-    expect(provider.get({ ...config, family: 'No Such Font' })).toBeNull();
-    expect(cb).not.toHaveBeenCalled();
+    const missing = { ...config, family: 'No Such Font' };
+    expect(provider.failed(missing)).toBe(false);
+    expect(await provider.load(missing)).toBeNull();
+    expect(provider.get(missing)).toBeNull();
+    expect(provider.failed(missing)).toBe(true);
+    // Listeners hear of the failure, so the badge resolves again and says so.
+    expect(cb).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports a font whose files will not download as failed, and clears that once a load succeeds', async () => {
+    // A family of its own, so the session's file cache holds nothing for it yet.
+    const flaky = { ...meta, id: 'flaky-sans', family: 'Flaky Sans', variants: { '400': { normal: { latin: { url: { ttf: 'https://files.test/flaky.ttf' } } } } } };
+    const flakyConfig = { ...config, family: 'Flaky Sans' };
+    let filesUp = false;
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url === 'https://api.fontsource.org/v1/fonts/flaky-sans') return { ok: true, json: async () => flaky };
+      if (url === 'https://files.test/flaky.ttf' && filesUp) return { ok: true, arrayBuffer: async () => bytes };
+      return { ok: false };
+    }));
+    const provider = createFontProvider();
+    expect(await provider.load(flakyConfig)).toBeNull();
+    expect(provider.failed(flakyConfig)).toBe(true);
+    filesUp = true;
+    expect(await provider.load(flakyConfig)).not.toBeNull();
+    expect(provider.failed(flakyConfig)).toBe(false);
   });
 });

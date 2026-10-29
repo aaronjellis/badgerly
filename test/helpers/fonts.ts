@@ -21,11 +21,12 @@ export function font(name: string): TextFont {
   return f;
 }
 
-/** A provider whose `get` always returns `fonts` (null means the fonts are still loading). */
-export function fakeProvider(fonts: TextFont[] | null): FontProvider {
+/** A provider whose `get` always returns `fonts` (null means the fonts are still loading, or with `failed`, will not load). */
+export function fakeProvider(fonts: TextFont[] | null, failed = false): FontProvider {
   return {
     get: () => fonts,
     load: async () => fonts,
+    failed: () => fonts === null && failed,
     onChange: () => () => {},
   };
 }

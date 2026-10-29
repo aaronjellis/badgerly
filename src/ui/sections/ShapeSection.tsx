@@ -1,7 +1,7 @@
 import React from 'react';
 import { NumberField } from '../../components/NumberField';
 import type { DisplayUnit } from '../../engine/model';
-import { SHAPE_OPTIONS } from '../../engine/shapes';
+import { secondaryMax, SHAPE_OPTIONS } from '../../engine/shapes';
 import type { ShapeConfig } from '../../engine/shapes';
 import { Field, Segmented } from '../Field';
 import { ShapeThumb } from '../ShapeThumb';
@@ -18,12 +18,8 @@ const SECONDARY_KEY: Record<Secondary, 'cornerMm' | 'scallopMm' | 'depthMm' | 'h
   hug: 'hugMm',
 };
 
-/** The largest value `clampShape` allows each secondary size on a badge of this short side, in mm. */
-function secondaryMax(use: Secondary, shortMm: number): number {
-  if (use === 'corner') return shortMm / 2;
-  if (use === 'hug') return 50;
-  return shortMm / 4;
-}
+/** The largest hug the field takes, in mm; `clampShape` sets none. */
+const HUG_FIELD_MAX_MM = 50;
 
 /** Units, the outline picker, the badge size, and the sizes the chosen outline uses. */
 export const ShapeSection: React.FC<SectionProps> = ({ project, dispatch }) => {
@@ -94,7 +90,7 @@ export const ShapeSection: React.FC<SectionProps> = ({ project, dispatch }) => {
               <NumberField
                 valueMm={shape[SECONDARY_KEY[use]]}
                 minMm={0}
-                maxMm={secondaryMax(use, shortMm)}
+                maxMm={use === 'hug' ? HUG_FIELD_MAX_MM : secondaryMax(use, shortMm)}
                 step={isInch ? 0.05 : 0.5}
                 displayUnit={unit}
                 inDecimals={2}

@@ -3,7 +3,7 @@ import type { Dispatch } from 'react';
 import type { FontProvider } from '../engine/fontProvider';
 import { bounds, polyToSvgPath } from '../engine/geom';
 import type { Pt, Rect } from '../engine/geom';
-import { CUT, laserPieces, pieceBounds } from '../engine/laserExport';
+import { CUT, laserPieces, pieceBounds, pieceSlots } from '../engine/laserExport';
 import type { SvgPiece } from '../engine/laserExport';
 import type { BadgeElement, BadgeProject, DisplayUnit, TextElement } from '../engine/model';
 import type { ResolvedBadge, ResolvedElement } from '../engine/resolve';
@@ -12,7 +12,7 @@ import type { Guides } from '../engine/snapping';
 import { capHeightPx, TEXT_RENDER_SIZE_PX } from '../engine/textOutline';
 import type { Action } from '../state/reducer';
 import { STAGE_ACCENT_HEX } from './stageColors';
-import { addPairEm, alongText, anchoredCenter, fallbackFontMm, fallbackInk, kerningDeltaEm, kerningHandles, pieceSlots, round2, scaleFactor, textLines } from './stageMath';
+import { addPairEm, alongText, anchoredCenter, fallbackFontMm, fallbackInk, kerningDeltaEm, kerningHandles, round2, scaleFactor, textLines } from './stageMath';
 import { useMediaQuery } from './useMediaQuery';
 
 /** The badge's face on the stage: a step lighter than the stage, so the outline reads against it. */
@@ -26,8 +26,6 @@ const GUIDE = '#ff2bd6';
 
 const MIN_ZOOM = 0.35;
 const MAX_ZOOM = 16;
-/** The gap between pieces in the stacked layout, in mm; the export uses the same. */
-const GAP_MM = 5;
 /** A snap reaches this far on screen, in px. */
 const SNAP_PX = 6;
 /** A drag starts after the pointer moves this far, in px (more for a finger), so a click does not nudge. */
@@ -126,7 +124,7 @@ export const Stage2D: React.FC<Stage2DProps> = ({ project, resolved, selectedId,
 
   // The pieces laid side by side, as the export lays them.
   const pieces = useMemo<SvgPiece[] | null>(() => (layout ? laserPieces(project, resolved) : null), [layout, project, resolved]);
-  const slots = useMemo(() => (pieces ? pieceSlots(pieces.map(pieceBounds), GAP_MM) : null), [pieces]);
+  const slots = useMemo(() => (pieces ? pieceSlots(pieces.map(pieceBounds)) : null), [pieces]);
 
   const content: Rect = (layout ? slots?.bounds : bounds(resolved.outline)) ?? EMPTY_BOX;
 

@@ -179,7 +179,7 @@ export const BorderSection: React.FC<SectionProps> = ({ project, dispatch, resol
                   {uploadError}
                 </p>
               ) : (
-                <p className="helper-note">Draw the art for the top-left corner as filled shapes. The other three corners mirror it.</p>
+                <p className="helper-note">Draw the art for the top-left corner as filled shapes. Art size sets the longer side of the SVG’s viewBox, and the other three corners mirror it.</p>
               )}
             </>
           )}
