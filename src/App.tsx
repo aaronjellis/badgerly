@@ -30,8 +30,8 @@ export function App() {
   const relief = useRelief(project, resolved);
   const { status, setStatus, busy, exportAs } = useExport(project, fonts);
   const file = useProjectFile({ project, dispatch, clearSelection: () => setSelectedId(null), setStatus });
-  /** 3D print mode shows the 3D preview first, and keeps the choice for the session. */
-  const [stageView, setStageView] = useState<StageView>('3d');
+  /** 3D print mode opens flat, where elements can be dragged; the 3D preview is a tap away, and the choice lasts the session. */
+  const [stageView, setStageView] = useState<StageView>('2d');
   const [settingQuery, setSettingQuery] = useState('');
   /** Whether the selected text shows its letter-pair handles on the stage. */
   const [adjustPairs, setAdjustPairs] = useState(false);

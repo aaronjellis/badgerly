@@ -111,6 +111,28 @@
     flex: none;
     overflow: visible;
   }
+
+  /* The view toggles (2D, 3D, Fit, Show layout) lead the row and stay pinned at its left edge while
+     the legend scrolls under them, so the way back to the flat editor is always in view. The
+     background, and the strip before it, hide what scrolls beneath; the mask fades the strip. */
+  .hud-toggles {
+    position: sticky;
+    z-index: 1;
+    left: 0;
+    order: -2;
+    padding-right: 0.375rem;
+    background: var(--stage);
+  }
+
+  .hud-toggles::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 100%;
+    bottom: 0;
+    width: 0.75rem;
+    background: var(--stage);
+  }
 }
 
 .hud-chip,
