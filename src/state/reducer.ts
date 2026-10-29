@@ -1,5 +1,5 @@
 /** The badge project's state: one reducer holds every edit, so the editor and its tests share the same rules. */
-import { BACKING_ID, defaultProject, newId } from '../engine/model';
+import { BACKING_ID, newId } from '../engine/model';
 import type { BadgeElement, BadgeProject, Layer, ReliefConfig } from '../engine/model';
 import { clampBorder } from '../engine/border';
 import type { BorderConfig } from '../engine/border';
@@ -15,12 +15,10 @@ export type Action =
   | { type: 'updateElement'; id: string; patch: Partial<BadgeElement> }
   | { type: 'removeElement'; id: string }
   | { type: 'duplicateElement'; id: string }
-  | { type: 'moveElement'; id: string; dx: number; dy: number }
   | { type: 'addLayer' }
   | { type: 'updateLayer'; id: string; patch: Partial<Layer> }
   | { type: 'removeLayer'; id: string } // elements on it move to the backing
-  | { type: 'load'; project: BadgeProject }
-  | { type: 'new' };
+  | { type: 'load'; project: BadgeProject };
 
 /** How far a duplicate sits from the original, in mm, in x and y. */
 const DUPLICATE_OFFSET_MM = 5;
@@ -65,8 +63,6 @@ export function reduce(p: BadgeProject, a: Action): BadgeProject {
       copy.y += DUPLICATE_OFFSET_MM;
       return { ...p, elements: [...p.elements, copy] };
     }
-    case 'moveElement':
-      return mapElement(p, a.id, (el) => ({ ...el, x: el.x + a.dx, y: el.y + a.dy }));
     case 'addLayer':
       return { ...p, layers: [...p.layers, { id: newId(), name: `Layer ${p.layers.length}`, thicknessMm: 3 }] };
     case 'updateLayer':
@@ -81,7 +77,5 @@ export function reduce(p: BadgeProject, a: Action): BadgeProject {
     }
     case 'load':
       return a.project;
-    case 'new':
-      return defaultProject();
   }
 }

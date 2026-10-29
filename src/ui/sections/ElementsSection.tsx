@@ -63,7 +63,6 @@ export const ElementsSection: React.FC<SectionProps> = ({ project, dispatch, sel
     selectNext.current = false;
     const last = project.elements[count - 1];
     if (last) setSelectedId(last.id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [count]);
 
   // The picker belongs to one element.

@@ -102,7 +102,6 @@ export const FontPicker: React.FC<FontPickerProps> = ({ catalog, value, sampleTe
     // A phone's keyboard would cover the list, so only a desktop opens on the search field.
     if (!phone) searchRef.current?.focus();
     return () => before?.focus?.();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Escape closes the picker wherever focus is: on a phone it is often on the body, not in the panel.

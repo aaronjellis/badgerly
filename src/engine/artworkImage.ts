@@ -56,13 +56,6 @@ export function imageAspect(img: { naturalWidth: number; naturalHeight: number }
   return img.naturalWidth > 0 && img.naturalHeight > 0 ? img.naturalHeight / img.naturalWidth : null;
 }
 
-/** The largest rectangle of the given aspect that fits a box, centred in it: SVG's "xMidYMid meet". */
-export function containRect(boxW: number, boxH: number, aspect: number): { x: number; y: number; w: number; h: number } {
-  const w = Math.min(boxW, boxH / aspect);
-  const h = w * aspect;
-  return { x: (boxW - w) / 2, y: (boxH - h) / 2, w, h };
-}
-
 /** A size of the given aspect whose longer side is `longSide`. */
 export function sizeForAspect(aspect: number, longSide: number): { widthMm: number; heightMm: number } {
   return aspect <= 1 ? { widthMm: longSide, heightMm: longSide * aspect } : { widthMm: longSide / aspect, heightMm: longSide };

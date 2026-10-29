@@ -39,10 +39,8 @@ export function useProject(): ProjectState {
       if (el.kind === 'text') void fonts.load(el.text).catch(() => undefined);
     }
     // `textKey` stands for the text configs; `project` itself changes on every drag.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [textKey]);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const resolved = useMemo(() => resolveBadge(project, fonts, PREVIEW_TOL_MM), [project, fontTick]);
 
   const selectedId = pickedId !== null && project.elements.some((el) => el.id === pickedId) ? pickedId : null;

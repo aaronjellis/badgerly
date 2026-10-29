@@ -393,7 +393,6 @@ export const Stage2D: React.FC<Stage2DProps> = ({ project, resolved, selectedId,
     if (!from) return;
     const c = anchoredCenter(from.center0, from.startOffset, offset, el.rotationDeg);
     if (c.x !== el.x || c.y !== el.y) dispatch({ type: 'updateElement', id: el.id, patch: { x: c.x, y: c.y } });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resolved]);
 
   /** Where an element can be hit and selected: its ink box, or a guess at one for text still loading. */

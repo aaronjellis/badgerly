@@ -93,12 +93,6 @@ describe('reducer', () => {
     expect(copy.role).not.toBe(p.elements[1].role);
   });
 
-  it('moveElement adds the offset to x and y', () => {
-    let p = reduce(defaultProject(), { type: 'addElement', element: graphic('g1') });
-    p = reduce(p, { type: 'moveElement', id: 'g1', dx: 2.5, dy: -1 });
-    expect(p.elements[1]).toMatchObject({ x: 3.5, y: 1 });
-  });
-
   it('addLayer appends a top layer; updateLayer edits it', () => {
     let p = reduce(defaultProject(), { type: 'addLayer' });
     expect(p.layers).toHaveLength(3);
@@ -114,20 +108,17 @@ describe('reducer', () => {
     expect(reduce(p, { type: 'removeLayer', id: BACKING_ID }).layers).toEqual(p.layers);
   });
 
-  it('load replaces the project and new restores the default', () => {
+  it('load replaces the project', () => {
     const other: BadgeProject = { ...defaultProject(), name: 'Other' };
     const loaded = reduce(defaultProject(), { type: 'load', project: other });
     expect(loaded).toBe(other);
-    const fresh = reduce(loaded, { type: 'new' });
-    expect(fresh.name).toBe('Badge');
-    expect(fresh.elements).toHaveLength(1);
   });
 
   it('does not mutate the project it is given', () => {
     const p = defaultProject();
     const copy = structuredClone(p);
     reduce(p, { type: 'setShape', patch: { cornerMm: 3 } });
-    reduce(p, { type: 'moveElement', id: p.elements[0].id, dx: 1, dy: 1 });
+    reduce(p, { type: 'updateElement', id: p.elements[0].id, patch: { x: 1, y: 1 } });
     reduce(p, { type: 'removeLayer', id: p.layers[1].id });
     expect(p).toEqual(copy);
   });
