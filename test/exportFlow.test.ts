@@ -38,8 +38,14 @@ describe('projectSlug', () => {
   });
   it('falls back to badge when nothing is left', () => {
     expect(projectSlug('')).toBe('badge');
+    expect(projectSlug('   ')).toBe('badge');
     expect(projectSlug('---')).toBe('badge');
-    expect(projectSlug('日本')).toBe('badge');
+  });
+  it('keeps letters and digits of any script', () => {
+    expect(projectSlug('Café Sign')).toBe('café-sign');
+    expect(projectSlug('Cafe\u0301 Sign')).toBe('café-sign');
+    expect(projectSlug('日本 2')).toBe('日本-2');
+    expect(projectSlug('a/b:c')).toBe('a-b-c');
   });
 });
 

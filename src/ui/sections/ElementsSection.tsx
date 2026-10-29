@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Copy, Image as ImageIcon, Plus, Trash2, Type, Upload } from 'lucide-react';
+import { AlignHorizontalJustifyCenter, AlignVerticalJustifyCenter, Copy, Image as ImageIcon, Plus, Trash2, Type, Upload } from 'lucide-react';
 import { NumberField } from '../../components/NumberField';
 import { sizeForAspect } from '../../engine/artworkImage';
 import { fetchFontCatalog } from '../../engine/fontCatalog';
@@ -23,6 +23,12 @@ const GRAPHIC_LONG_SIDE_MM = 25.4;
 const NEW_TEXT_CAP_MM = 7.62;
 /** Warnings worth showing next to the element they came from. */
 const ELEMENT_WARNINGS = new Set(['strokeOnlySvg', 'missingFont']);
+
+const LASER_OPTIONS: { value: ElementRole['laser']; label: string }[] = [
+  { value: 'engrave', label: 'Engrave' },
+  { value: 'score', label: 'Score' },
+  { value: 'cutout', label: 'Cut out' },
+];
 
 /** One catalog fetch for the session: the section and the picker both need it. */
 let catalogRequest: Promise<FontFamily[]> | null = null;
@@ -149,6 +155,8 @@ export const ElementsSection: React.FC<SectionProps> = ({ project, dispatch, sel
     </Field>
   );
 
+  // A PNG, or an SVG that could not be read, is drawn as an image: it has no outline to score or cut.
+  const raster = !!selected && resolved.elements.some((r) => r.id === selected.id && r.raster);
   const warnings = selected ? resolved.warnings.filter((w) => w.elementId === selected.id && ELEMENT_WARNINGS.has(w.code)) : [];
 
   return (
@@ -187,7 +195,7 @@ export const ElementsSection: React.FC<SectionProps> = ({ project, dispatch, sel
         <ul className="element-list" aria-label="Elements">
           {project.elements.map((el) => (
             <li key={el.id}>
-              <button type="button" className="element-row" aria-pressed={el.id === selectedId} onClick={() => setSelectedId(el.id)}>
+              <button type="button" className="element-row ph-no-capture" aria-pressed={el.id === selectedId} onClick={() => setSelectedId(el.id)}>
                 {el.kind === 'text' ? <Type size={16} strokeWidth={1.75} aria-hidden="true" /> : <ImageIcon size={16} strokeWidth={1.75} aria-hidden="true" />}
                 <span className="element-row-name">{el.name}</span>
                 <span className="element-row-role">{roleLabel(project, el)}</span>
@@ -200,7 +208,7 @@ export const ElementsSection: React.FC<SectionProps> = ({ project, dispatch, sel
       {selected && (
         <div className="element-editor" aria-label={`Settings for ${selected.name}`} role="group">
           <Field label="Name">
-            <input type="text" value={selected.name} onChange={(e) => patch({ name: e.target.value })} />
+            <input type="text" className="ph-no-capture" value={selected.name} onChange={(e) => patch({ name: e.target.value })} />
           </Field>
 
           {selected.kind === 'text' && (
@@ -236,17 +244,25 @@ export const ElementsSection: React.FC<SectionProps> = ({ project, dispatch, sel
             </Field>
           </div>
 
+          {/* The badge's center is the origin of its coordinates. */}
+          <div className="two-col-inputs">
+            <button type="button" className="btn btn-sm" disabled={selected.x === 0} onClick={() => patch({ x: 0 })} title="Snap to the badge's vertical center line">
+              <AlignHorizontalJustifyCenter size={16} strokeWidth={1.75} aria-hidden="true" />
+              Center horizontally
+            </button>
+            <button type="button" className="btn btn-sm" disabled={selected.y === 0} onClick={() => patch({ y: 0 })} title="Snap to the badge's horizontal center line">
+              <AlignVerticalJustifyCenter size={16} strokeWidth={1.75} aria-hidden="true" />
+              Center vertically
+            </button>
+          </div>
+
           {mode === 'laser' && (
-            <Field label="Laser" group>
+            <Field label="Laser" group hint={raster ? 'An image has no outline to score or cut, so it is engraved.' : undefined}>
               <Segmented<ElementRole['laser']>
                 ariaLabel="Laser operation"
                 value={selected.role.laser}
                 onChange={(laser) => setRole({ laser })}
-                options={[
-                  { value: 'engrave', label: 'Engrave' },
-                  { value: 'score', label: 'Score' },
-                  { value: 'cutout', label: 'Cut out' },
-                ]}
+                options={raster ? LASER_OPTIONS.slice(0, 1) : LASER_OPTIONS}
               />
             </Field>
           )}
@@ -337,10 +353,7 @@ export const ElementsSection: React.FC<SectionProps> = ({ project, dispatch, sel
           catalog={catalog}
           value={selected.text.family}
           sampleText={selected.text.text.split(/\r?\n/)[0].slice(0, 24)}
-          onPick={(f) => {
-            patch({ text: { ...selected.text, family: f.family } });
-            setPickerOpen(false);
-          }}
+          onPick={(f) => patch({ text: { ...selected.text, family: f.family } })}
           onClose={() => setPickerOpen(false)}
         />
       )}

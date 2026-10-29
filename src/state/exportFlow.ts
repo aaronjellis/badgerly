@@ -42,9 +42,13 @@ export interface ExportOutcome {
 /** The wait between two downloads, which browsers otherwise tend to block as a burst. */
 export const SECOND_DOWNLOAD_DELAY_MS = 250;
 
-/** The project name as a file name: lowercase, runs of other characters become one `-`, ends trimmed. */
+/**
+ * The project name as a file name: lowercase, letters and digits of any script kept (accents composed
+ * first, so an é typed as e and an accent stays one letter), runs of anything else become one `-`,
+ * ends trimmed; `badge` when nothing is left.
+ */
 export function projectSlug(name: string): string {
-  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'badge';
+  return name.normalize('NFC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '') || 'badge';
 }
 
 /** The formats this badge offers in its mode. */

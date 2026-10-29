@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Search, X } from 'lucide-react';
+import { Search } from 'lucide-react';
 import type { FontFamily } from '../engine/fontCatalog';
 import { loadPreviewCss } from '../engine/googleFonts';
 import { filterFamilies, pushRecentFont, readRecentFonts } from './fontList';
@@ -39,6 +39,8 @@ interface FontPickerProps {
 /**
  * A panel over the inspector (a full-screen sheet on a phone) listing every family as a tile that
  * shows the sample text in its own face. A tile's stylesheet is requested only as it nears the view.
+ * Picking a tile applies it and keeps the panel open, so you can try several; Done, Escape, or a click
+ * outside closes it.
  */
 export const FontPicker: React.FC<FontPickerProps> = ({ catalog, value, sampleText, onPick, onClose }) => {
   const phone = useMediaQuery(PHONE_QUERY);
@@ -127,7 +129,7 @@ export const FontPicker: React.FC<FontPickerProps> = ({ catalog, value, sampleTe
       key={f.id}
       ref={chip ? undefined : watch}
       type="button"
-      className={chip ? 'font-chip' : 'font-tile'}
+      className={`${chip ? 'font-chip' : 'font-tile'} ph-no-capture`}
       data-family={f.family}
       aria-pressed={f.family === value}
       onClick={() => pick(f)}
@@ -157,8 +159,8 @@ export const FontPicker: React.FC<FontPickerProps> = ({ catalog, value, sampleTe
               onChange={(e) => setQuery(e.target.value)}
             />
           </div>
-          <button type="button" className="icon-btn" aria-label="Close font list" onClick={onClose}>
-            <X size={18} strokeWidth={1.75} aria-hidden="true" />
+          <button type="button" className="btn btn-sm" onClick={onClose}>
+            Done
           </button>
         </div>
 

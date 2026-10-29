@@ -1,7 +1,6 @@
 /** New, Open and Save for `.badge` files, and whether the badge has changes the file doesn't. */
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent, Dispatch, RefObject } from 'react';
-import { defaultProject } from '../engine/model';
 import type { BadgeProject } from '../engine/model';
 import { parseProject, PROJECT_EXTENSION, ProjectFileError, serializeProject } from '../engine/projectFile';
 import { triggerDownload } from '../ui/download';
@@ -9,6 +8,7 @@ import { projectSlug } from './exportFlow';
 import { initialFileState, isUnsaved, stepFile } from './projectFileState';
 import type { FileEvent, SavedState } from './projectFileState';
 import type { Action } from './reducer';
+import { newProject } from './unitPreference';
 
 const DISCARD_PROMPT = 'Discard unsaved changes?';
 
@@ -39,6 +39,17 @@ export function useProjectFile({ project, dispatch, clearSelection, setStatus }:
   // Saved and unsaved JSON-compare only when the project object has changed.
   const unsaved = useMemo(() => isUnsaved(project, saved), [project, saved]);
 
+  // Closing or reloading the tab with unsaved changes asks first, as Kerfuffle does.
+  useEffect(() => {
+    if (!unsaved) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [unsaved]);
+
   /** Every change to what counts as saved goes through `stepFile`, the step the tests cover. */
   const step = (event: FileEvent) => setSaved((prev) => stepFile({ project, saved: prev }, event).saved);
 
@@ -51,7 +62,7 @@ export function useProjectFile({ project, dispatch, clearSelection, setStatus }:
   const onNew = () => {
     if (unsaved && !window.confirm(DISCARD_PROMPT)) return;
     // A fresh project gets fresh ids, so it is loaded rather than made by the reducer: that way it is the saved one.
-    load(defaultProject(), 'new');
+    load(newProject(), 'new');
     setStatus(null);
   };
 

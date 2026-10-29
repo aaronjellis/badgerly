@@ -36,3 +36,10 @@
   stroke: #fff;
   stroke-width: 2.5px;
 }
+
+/* The flat-top legend: a dashed ring for the dashed guide line. */
+.hud-chip .dot-dashed {
+  box-sizing: border-box;
+  background: none;
+  border: 1.5px dashed;
+}

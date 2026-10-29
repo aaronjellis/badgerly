@@ -30,7 +30,7 @@ npm run build    # Typecheck and build to dist
 - **SVG** is a 1:1 file in millimeters. Cut lines are red, score lines are blue, and engraving is black. Stacked output has one piece for the backing and one for each top layer.
 - **STL** is one closed solid in millimeters. The multi-color split downloads two files, the plate and the parts. Your browser may ask you to allow both downloads.
 
-Everything runs in your browser, and nothing uploads. The only network requests are for fonts: the catalog and font files come from Fontsource, and the picker and stage previews load Google Fonts stylesheets.
+No design data leaves your browser. Network requests load fonts, analytics, and the feedback widget. The font catalog and files come from Fontsource, and the picker and stage previews load Google Fonts stylesheets.
 
 ## Project files
 

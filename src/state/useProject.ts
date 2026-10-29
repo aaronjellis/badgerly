@@ -4,12 +4,12 @@ import type { Dispatch } from 'react';
 import { createFontProvider } from '../engine/fontProvider';
 import type { FontProvider } from '../engine/fontProvider';
 import { PREVIEW_TOL_MM } from '../engine/geom';
-import { defaultProject } from '../engine/model';
 import type { BadgeProject } from '../engine/model';
 import { resolveBadge } from '../engine/resolve';
 import type { ResolvedBadge } from '../engine/resolve';
 import { reduce } from './reducer';
 import type { Action } from './reducer';
+import { newProject, saveUnit } from './unitPreference';
 
 /** One provider for the session, so loaded fonts are shared and cached. */
 const fonts = createFontProvider();
@@ -26,11 +26,14 @@ export interface ProjectState {
 }
 
 export function useProject(): ProjectState {
-  const [project, dispatch] = useReducer(reduce, undefined, defaultProject);
+  const [project, dispatch] = useReducer(reduce, undefined, () => newProject());
   const [pickedId, setSelectedId] = useState<string | null>(null);
   const [fontTick, setFontTick] = useState(0);
 
   useEffect(() => fonts.onChange(() => setFontTick((n) => n + 1)), []);
+
+  // The unit in use is the one a new project starts in, this visit and the next.
+  useEffect(() => saveUnit(project.unit), [project.unit]);
 
   // Ask for the fonts the text elements need; each load that lands re-resolves through `onChange`.
   const textKey = JSON.stringify(project.elements.map((el) => (el.kind === 'text' ? el.text : null)));

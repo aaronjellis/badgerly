@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { area, bounds, contains, offset, outerCount, pathLength } from '../src/engine/geom';
 import type { Poly, Pt } from '../src/engine/geom';
 import { buildShape, DEFAULT_SHAPE } from '../src/engine/shapes';
-import { buildBorder, clampBorder, dashPath, DEFAULT_BORDER, scoresBorder } from '../src/engine/border';
+import { borderInsetFloor, buildBorder, clampBorder, dashPath, DEFAULT_BORDER, scoresBorder } from '../src/engine/border';
 import { CORNER_MOTIFS, motifPoly } from '../src/engine/cornerArt';
 
 const badge = buildShape({ ...DEFAULT_SHAPE, kind: 'rounded' }, 0.01);
@@ -168,6 +168,15 @@ describe('clampBorder', () => {
 
   it('returns the border it was given when nothing is limited', () => {
     expect(clampBorder(DEFAULT_BORDER, rounded)).toBe(DEFAULT_BORDER);
+    expect(clampBorder(DEFAULT_BORDER, rounded, 1)).toBe(DEFAULT_BORDER);
+  });
+
+  it('keeps all of the line on the flat top past a 3D edge', () => {
+    // The line's middle sits half a line width past the edge, so its outer side lands on the flat top's rim.
+    expect(clampBorder({ ...DEFAULT_BORDER, insetMm: 0.5 }, rounded, 1).insetMm).toBe(1.25);
+    expect(borderInsetFloor({ ...DEFAULT_BORDER, widthMm: 2 }, rounded, 3)).toBe(4);
+    expect(borderInsetFloor(DEFAULT_BORDER, scallop, 1)).toBe(5);
+    expect(borderInsetFloor(DEFAULT_BORDER, rounded, 0)).toBe(0.25);
   });
 });
 

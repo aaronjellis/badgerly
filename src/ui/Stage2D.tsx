@@ -23,6 +23,8 @@ const INK = '#e9e4d8';
 const SCORE_TINT = '#6f9bff';
 /** The alignment guides while dragging. */
 const GUIDE = '#ff2bd6';
+/** The 3D badge's flat top, inside the edge: a dashed line in a muted stage ink. */
+const FLAT_GUIDE = 'rgb(255 255 255 / 0.45)';
 
 const MIN_ZOOM = 0.35;
 const MAX_ZOOM = 16;
@@ -106,6 +108,11 @@ export const Stage2D: React.FC<Stage2DProps> = ({ project, resolved, selectedId,
   const [size, setSize] = useState({ w: 800, h: 600 });
   const [showLayout, setShowLayout] = useState(false);
   const [hits, setHits] = useState<{ x: number | null; y: number | null } | null>(null);
+  /**
+   * On a hug-the-lettering badge, where the element is drawn while it is dragged: the outline follows every
+   * element, so re-resolving on each move is too slow to drag by. The move lands once, on release.
+   */
+  const [localMove, setLocalMove] = useState<{ id: string; dx: number; dy: number } | null>(null);
   const coarse = useMediaQuery('(pointer: coarse)');
 
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -120,6 +127,7 @@ export const Stage2D: React.FC<Stage2DProps> = ({ project, resolved, selectedId,
   const seenRef = useRef<{ id: string; pairs: string; center: Pt; offset: number } | null>(null);
 
   const stacked = project.mode === 'laser' && project.laserVariant === 'stacked';
+  const hugs = project.shape.kind === 'hugText';
   const layout = stacked && showLayout;
 
   // The pieces laid side by side, as the export lays them.
@@ -238,7 +246,7 @@ export const Stage2D: React.FC<Stage2DProps> = ({ project, resolved, selectedId,
   };
 
   const startMove = (e: React.PointerEvent, el: BadgeElement, ink: Rect) => {
-    if (e.button !== 0 || layout) return;
+    if (e.button !== 0 || !e.isPrimary || layout) return;
     e.stopPropagation();
     capture(e.pointerId);
     onSelect(el.id);
@@ -247,7 +255,7 @@ export const Stage2D: React.FC<Stage2DProps> = ({ project, resolved, selectedId,
   };
 
   const startScale = (e: React.PointerEvent, el: BadgeElement) => {
-    if (e.button !== 0) return;
+    if (e.button !== 0 || !e.isPrimary) return;
     e.stopPropagation();
     capture(e.pointerId);
     const c = { x: el.x, y: el.y };
@@ -262,7 +270,7 @@ export const Stage2D: React.FC<Stage2DProps> = ({ project, resolved, selectedId,
   };
 
   const startKern = (e: React.PointerEvent, el: TextElement, key: string) => {
-    if (e.button !== 0) return;
+    if (e.button !== 0 || !e.isPrimary) return;
     const set = fonts.get(el.text);
     if (!set || set.length === 0) return;
     e.stopPropagation();
@@ -292,7 +300,7 @@ export const Stage2D: React.FC<Stage2DProps> = ({ project, resolved, selectedId,
   };
 
   const startPan = (e: React.PointerEvent) => {
-    if (e.button !== 0) return;
+    if (e.button !== 0 || !e.isPrimary) return;
     capture(e.pointerId);
     dragRef.current = { kind: 'pan', startX: e.clientX, startY: e.clientY, pan0: view.pan, moved: false };
   };
@@ -302,7 +310,8 @@ export const Stage2D: React.FC<Stage2DProps> = ({ project, resolved, selectedId,
 
   const onPointerMove = (e: React.PointerEvent) => {
     const d = dragRef.current;
-    if (!d) return;
+    // A second finger or pen is not the one dragging.
+    if (!d || !e.isPrimary) return;
     if (d.kind === 'move') {
       const dxPx = e.clientX - d.startX;
       const dyPx = e.clientY - d.startY;
@@ -318,7 +327,8 @@ export const Stage2D: React.FC<Stage2DProps> = ({ project, resolved, selectedId,
       const ax = round2(snapped.dx);
       const ay = round2(snapped.dy);
       if (ax !== d.applied.x || ay !== d.applied.y) {
-        dispatch({ type: 'updateElement', id: d.id, patch: { x: round2(d.origin.x + ax), y: round2(d.origin.y + ay) } });
+        if (hugs) setLocalMove({ id: d.id, dx: ax, dy: ay });
+        else dispatch({ type: 'updateElement', id: d.id, patch: { x: round2(d.origin.x + ax), y: round2(d.origin.y + ay) } });
         d.applied = { x: ax, y: ay };
       }
       setHit(snapped.hitX, snapped.hitY);
@@ -348,17 +358,24 @@ export const Stage2D: React.FC<Stage2DProps> = ({ project, resolved, selectedId,
 
   const endDrag = (e: React.PointerEvent) => {
     const d = dragRef.current;
+    if (!d || !e.isPrimary) return;
     dragRef.current = null;
-    if (d?.kind === 'kern') anchorRef.current = null;
+    if (d.kind === 'kern') anchorRef.current = null;
     setHits(null);
+    // A hug drag lands where it was let go; a cancelled one goes back.
+    if (d.kind === 'move' && hugs && (d.applied.x !== 0 || d.applied.y !== 0) && e.type === 'pointerup') {
+      dispatch({ type: 'updateElement', id: d.id, patch: { x: round2(d.origin.x + d.applied.x), y: round2(d.origin.y + d.applied.y) } });
+    }
+    setLocalMove(null);
     // A press on the background that never became a pan is a click: it deselects.
-    if (d?.kind === 'pan' && !d.moved && e.type === 'pointerup') onSelect(null);
+    if (d.kind === 'pan' && !d.moved && e.type === 'pointerup') onSelect(null);
   };
 
   // Drawing data, rebuilt when the geometry changes.
   const paths = useMemo(
     () => ({
       outline: polyToSvgPath(resolved.outline),
+      flat: polyToSvgPath(resolved.flat),
       bands: polyToSvgPath(resolved.border.bands),
       ornaments: polyToSvgPath(resolved.border.ornaments),
       elements: new Map(resolved.elements.map((r) => [r.id, polyToSvgPath(r.poly)])),
@@ -399,6 +416,8 @@ export const Stage2D: React.FC<Stage2DProps> = ({ project, resolved, selectedId,
   const inkOf = (el: BadgeElement): Rect | null => resolvedById.get(el.id)?.ink ?? (el.kind === 'text' ? fallbackInk(el) : null);
 
   const px = 1 / scale; // one screen pixel in mm
+  // In 3D the edge rounds or bevels the rim; the dashed line is where the flat top, and the room for the border and elements, begins.
+  const flatGuide = project.mode === 'print3d' && project.relief.edge !== 'none' && resolved.flat.length > 0;
   const selected = layout ? undefined : project.elements.find((el) => el.id === selectedId);
   const selectedInk = selected ? inkOf(selected) : null;
   const handleDraw = 9 * px;
@@ -408,12 +427,23 @@ export const Stage2D: React.FC<Stage2DProps> = ({ project, resolved, selectedId,
     return r ? kerningHandles(r.clusters) : [];
   }, [selected, adjustPairs, resolvedById]);
 
+  /** The offset of an element dragged on a hug badge, as a transform; nothing for every other element. */
+  const shiftOf = (id: string): string | undefined => (localMove?.id === id ? `translate(${localMove.dx} ${localMove.dy})` : undefined);
+
+  /** How an element is drawn: cut out in the laser's cut color, printed in its fill, else as engraving. */
+  const paintOf = (el: BadgeElement) => {
+    if (project.mode === 'laser' && el.role.laser === 'cutout') return { fill: 'none', stroke: CUT };
+    if (project.mode === 'laser' && project.laserVariant === 'printcut' && el.role.printColor && el.role.laser === 'engrave') return { fill: el.role.fill };
+    return { fill: INK };
+  };
+
   const renderElement = (el: BadgeElement) => {
     const r = resolvedById.get(el.id);
     const ink = inkOf(el);
     const turn = rotation(el.rotationDeg, el.x, el.y);
+    const paint = paintOf(el);
     return (
-      <g key={el.id}>
+      <g key={el.id} transform={shiftOf(el.id)}>
         {r && r.raster && el.kind === 'graphic' ? (
           <image
             href={el.dataUrl}
@@ -425,7 +455,16 @@ export const Stage2D: React.FC<Stage2DProps> = ({ project, resolved, selectedId,
             transform={turn}
           />
         ) : (
-          r && r.poly.length > 0 && <path d={paths.elements.get(el.id)} fill={INK} fillRule="evenodd" />
+          r && r.poly.length > 0 && (
+            <path
+              d={paths.elements.get(el.id)}
+              fill={paint.fill}
+              fillRule="evenodd"
+              stroke={paint.stroke}
+              strokeWidth={paint.stroke ? 1.5 : undefined}
+              vectorEffect={paint.stroke ? 'non-scaling-stroke' : undefined}
+            />
+          )
         )}
         {!r && el.kind === 'text' && loading.has(el.id) && <LoadingText el={el} />}
         {ink && !layout && (
@@ -459,7 +498,7 @@ export const Stage2D: React.FC<Stage2DProps> = ({ project, resolved, selectedId,
       ref={wrapperRef}
       className="stage viewport-2d-wrapper stage2d"
       tabIndex={0}
-      aria-label="Badge stage. Arrow keys move the selected element; Delete removes it."
+      aria-label="Badge stage. Arrow keys move the selected element; Delete removes it, and Command or Control Z puts it back."
     >
       <div className="viewport-2d-hud">
         <div className="hud-scroll">
@@ -496,6 +535,12 @@ export const Stage2D: React.FC<Stage2DProps> = ({ project, resolved, selectedId,
               <span className="dot" style={{ backgroundColor: INK }} />
               Engrave
             </span>
+            {flatGuide && (
+              <span className="hud-chip" title="The dashed line is where the 3D edge ends and the flat top begins">
+                <span className="dot dot-dashed" style={{ borderColor: FLAT_GUIDE }} />
+                Flat top
+              </span>
+            )}
             {layout && (
               <span className="hud-chip" title="Score lines">
                 <span className="dot" style={{ backgroundColor: SCORE_TINT }} />
@@ -573,10 +618,14 @@ export const Stage2D: React.FC<Stage2DProps> = ({ project, resolved, selectedId,
             <path d={paths.outline} fill={BADGE_FILL} fillRule="evenodd" stroke={CUT} strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
             <path d={paths.bands} fill={INK} fillRule="evenodd" />
             <path d={paths.ornaments} fill={INK} fillRule="evenodd" />
+            {/* A non-scaling stroke dashes in screen pixels: 4 on, 3 off at any zoom. */}
+            {flatGuide && (
+              <path d={paths.flat} fill="none" stroke={FLAT_GUIDE} strokeWidth={1} strokeDasharray="4 3" vectorEffect="non-scaling-stroke" pointerEvents="none" />
+            )}
             {project.elements.map(renderElement)}
 
             {selected && selectedInk && (
-              <g transform={rotation(selected.rotationDeg, selected.x, selected.y)}>
+              <g transform={[shiftOf(selected.id), rotation(selected.rotationDeg, selected.x, selected.y)].filter(Boolean).join(' ') || undefined}>
                 <rect
                   x={selectedInk.x}
                   y={selectedInk.y}
@@ -611,8 +660,9 @@ export const Stage2D: React.FC<Stage2DProps> = ({ project, resolved, selectedId,
               </g>
             )}
 
-            {selected?.kind === 'text' &&
-              kernHandles.map((h) => {
+            {selected?.kind === 'text' && kernHandles.length > 0 && (
+              <g transform={shiftOf(selected.id)}>
+              {kernHandles.map((h) => {
                 const next = Array.from(textLines(selected)[h.line]?.slice(h.index) ?? '')[0] ?? '';
                 const value = selected.text.pairAdjustEm[h.key] ?? 0;
                 return (
@@ -635,6 +685,8 @@ export const Stage2D: React.FC<Stage2DProps> = ({ project, resolved, selectedId,
                   </g>
                 );
               })}
+              </g>
+            )}
 
             {hits && hits.x !== null && (
               <line x1={hits.x} x2={hits.x} y1={vbY} y2={vbY + vbH} stroke={GUIDE} strokeWidth={1} vectorEffect="non-scaling-stroke" pointerEvents="none" />

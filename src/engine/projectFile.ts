@@ -2,6 +2,7 @@ import { clampBorder, DEFAULT_BORDER } from './border';
 import type { BorderConfig, BorderStyle } from './border';
 import { BACKING_ID, DEFAULT_RELIEF, DEFAULT_ROLE, defaultBackingLayer, defaultLayers, defaultProject, newId } from './model';
 import type { BadgeElement, BadgeProject, ElementRole, Layer, ReliefConfig } from './model';
+import { edgeInsetMm } from './relief';
 import { clampShape, DEFAULT_SHAPE, SHAPE_OPTIONS } from './shapes';
 import type { ShapeConfig } from './shapes';
 import { DEFAULT_TEXT } from './textOutline';
@@ -192,16 +193,18 @@ export function parseProject(text: string): BadgeProject {
     : defaults.elements;
 
   const shape = parseShape(raw.shape);
+  const mode = oneOf(raw.mode, ['laser', 'print3d'], defaults.mode);
+  const relief = parseRelief(raw.relief);
   return {
     version: VERSION,
     name: isStr(raw.name) ? raw.name : defaults.name,
     unit: oneOf(raw.unit, ['mm', 'in'], defaults.unit),
-    mode: oneOf(raw.mode, ['laser', 'print3d'], defaults.mode),
+    mode,
     laserVariant: oneOf(raw.laserVariant, ['single', 'stacked', 'printcut'], defaults.laserVariant),
     shape,
-    border: clampBorder(parseBorder(raw.border), shape),
+    border: clampBorder(parseBorder(raw.border), shape, edgeInsetMm({ mode, relief, shape })),
     elements,
     layers,
-    relief: parseRelief(raw.relief),
+    relief,
   };
 }

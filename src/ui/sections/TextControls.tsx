@@ -42,7 +42,7 @@ export const TextControls: React.FC<TextControlsProps> = ({ el, unit, family, di
   return (
     <>
       <Field label="Text">
-        <textarea rows={2} value={text.text} onChange={(e) => setText({ text: e.target.value })} />
+        <textarea rows={2} className="ph-no-capture" value={text.text} onChange={(e) => setText({ text: e.target.value })} />
       </Field>
 
       <Field label="Font" group>

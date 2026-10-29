@@ -223,6 +223,12 @@ describe('projectFile', () => {
     expect(zero.border.insetMm).toBe(DEFAULT_BORDER.widthMm / 2);
   });
 
+  it('holds a 3D border inset past the edge when the file opens', () => {
+    const border = { ...DEFAULT_BORDER, insetMm: 0.5 };
+    expect(parse({ mode: 'print3d', border }).border.insetMm).toBe(1.25);
+    expect(parse({ mode: 'laser', border }).border.insetMm).toBe(0.5);
+  });
+
   it('gives a repeated element id a new one, keeping the first', () => {
     const p = parse({ elements: [textElement({ id: 'same' }), textElement({ id: 'same', name: 'Second' }), textElement({ id: 'other' })] });
     expect(p.elements[0].id).toBe('same');

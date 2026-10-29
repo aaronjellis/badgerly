@@ -4,6 +4,7 @@ import { exportFormats } from './state/exportFlow';
 import { useExport } from './state/useExport';
 import { useProjectFile } from './state/useProjectFile';
 import { useRelief } from './state/useRelief';
+import { useUndoRemove } from './state/useUndoRemove';
 import { AppBar } from './ui/AppBar';
 import { ErrorBoundary } from './ui/ErrorBoundary';
 import { Inspector } from './ui/Inspector';
@@ -23,7 +24,9 @@ const Stage3D = lazy(() => import('./ui/Stage3D').then((m) => ({ default: m.Stag
 const COUNTERPART: Partial<Record<PartId, PartId>> = { layers: 'relief', relief: 'layers' };
 
 export function App() {
-  const { project, dispatch, selectedId, setSelectedId, resolved, fonts } = useProject();
+  const { project, dispatch: send, selectedId, setSelectedId, resolved, fonts } = useProject();
+  // Every edit goes through this, so a removed element can come back with ⌘Z.
+  const dispatch = useUndoRemove(project, send, setSelectedId);
   const relief = useRelief(project, resolved);
   const { status, setStatus, busy, exportAs } = useExport(project, fonts);
   const file = useProjectFile({ project, dispatch, clearSelection: () => setSelectedId(null), setStatus });

@@ -80,6 +80,21 @@ describe('reducer', () => {
     expect(p.elements[0].kind).toBe('text');
   });
 
+  it('restoreElement puts a removed element back at its place in the list, once', () => {
+    let p = reduce(defaultProject(), { type: 'addElement', element: graphic('g1') });
+    p = reduce(p, { type: 'addElement', element: graphic('g2') });
+    const removed = p.elements[1];
+    const before = p.elements.map((el) => el.id);
+    p = reduce(p, { type: 'removeElement', id: 'g1' });
+    p = reduce(p, { type: 'restoreElement', element: removed, index: 1 });
+    expect(p.elements.map((el) => el.id)).toEqual(before);
+    expect(p.elements[1]).toBe(removed);
+    expect(reduce(p, { type: 'restoreElement', element: removed, index: 0 })).toBe(p);
+    // An index past the end appends.
+    p = reduce(reduce(p, { type: 'removeElement', id: 'g1' }), { type: 'restoreElement', element: removed, index: 9 });
+    expect(p.elements.map((el) => el.id).at(-1)).toBe('g1');
+  });
+
   it('duplicateElement copies with a new id, a "copy" suffix and a 5 mm offset', () => {
     let p = reduce(defaultProject(), { type: 'addElement', element: graphic('g1') });
     p = reduce(p, { type: 'duplicateElement', id: 'g1' });
@@ -112,6 +127,22 @@ describe('reducer', () => {
     const other: BadgeProject = { ...defaultProject(), name: 'Other' };
     const loaded = reduce(defaultProject(), { type: 'load', project: other });
     expect(loaded).toBe(other);
+  });
+
+  it('in 3D print, holds the border inset past the edge, and moves it when the edge grows', () => {
+    let p = reduce(defaultProject(), { type: 'setBorder', patch: { insetMm: 0.5 } });
+    expect(p.border.insetMm).toBe(0.5); // laser: no edge
+    p = reduce(p, { type: 'set', patch: { mode: 'print3d' } });
+    expect(p.border.insetMm).toBe(1.25); // the default 1 mm edge plus half the 0.5 mm line
+    p = reduce(p, { type: 'setRelief', patch: { edgeMm: 2 } });
+    expect(p.border.insetMm).toBe(2.25);
+    p = reduce(p, { type: 'setBorder', patch: { insetMm: 1 } });
+    expect(p.border.insetMm).toBe(2.25);
+    // An edge the badge cannot take is held by clampRelief first: the plate less 0.4 mm.
+    p = reduce(p, { type: 'setRelief', patch: { edgeMm: 40 } });
+    expect(p.border.insetMm).toBeCloseTo(2.85, 9);
+    p = reduce(p, { type: 'setRelief', patch: { edge: 'none', edgeMm: 1 } });
+    expect(reduce(p, { type: 'setBorder', patch: { insetMm: 0.5 } }).border.insetMm).toBe(0.5);
   });
 
   it('does not mutate the project it is given', () => {

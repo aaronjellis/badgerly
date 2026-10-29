@@ -21,6 +21,18 @@ export function shortcutFor(e: KeyLike): Shortcut | null {
   return KEYS[e.key.toLowerCase()] ?? null;
 }
 
+/** A field where ⌘Z undoes typing, which the browser keeps. */
+function isTextField(target: KeyLike['target']): boolean {
+  if (!target || typeof target !== 'object') return false;
+  const el = target as { tagName?: string; isContentEditable?: boolean };
+  return el.isContentEditable === true || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName ?? '');
+}
+
+/** Whether a key press asks to put back the last removed element: ⌘Z or Ctrl+Z, not in a text field, not a repeat. */
+export function undoesRemove(e: KeyLike): boolean {
+  return (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && !e.repeat && e.key.toLowerCase() === 'z' && !isTextField(e.target);
+}
+
 /** Runs the handler for ⌘S, ⌘O and ⌘E (Ctrl on other systems), in place of the browser's own. */
 export function useShortcuts(handlers: Record<Shortcut, () => void>): void {
   // The latest handlers, so the listener is added once and never runs a stale project.

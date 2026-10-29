@@ -72,6 +72,18 @@ export function clampRelief(relief: ReliefConfig, outline: Poly): ReliefConfig {
   };
 }
 
+/**
+ * How far in from the outline a 3D badge's edge reaches, as `clampRelief` holds it: what the border
+ * must clear. Zero outside 3D print mode and with no edge. A hug outline has no set size, so only
+ * the plate limits its edge here.
+ */
+export function edgeInsetMm(project: Pick<BadgeProject, 'mode' | 'relief' | 'shape'>): number {
+  if (project.mode !== 'print3d' || project.relief.edge === 'none') return 0;
+  const { kind, widthMm: w, heightMm: h } = project.shape;
+  const box: Poly = kind === 'hugText' ? [] : [[{ x: 0, y: 0 }, { x: w, y: 0 }, { x: w, y: h }, { x: 0, y: h }]];
+  return clampRelief(project.relief, box).edgeMm;
+}
+
 /** A raised or sunk region; `elementId` is unset for the border. */
 type Feature = { poly: Poly; mm: number; elementId?: string };
 

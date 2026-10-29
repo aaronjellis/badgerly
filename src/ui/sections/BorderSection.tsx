@@ -5,6 +5,7 @@ import { borderInsetFloor } from '../../engine/border';
 import type { BorderConfig, BorderStyle } from '../../engine/border';
 import { CORNER_MOTIFS, motifPoly } from '../../engine/cornerArt';
 import { polyToSvgPath } from '../../engine/geom';
+import { edgeInsetMm } from '../../engine/relief';
 import { Field, Segmented } from '../Field';
 import { readMotifFile } from './motifFile';
 import { unitHelpers } from './shared';
@@ -46,8 +47,10 @@ export const BorderSection: React.FC<SectionProps> = ({ project, dispatch, resol
   const [limitedTo, setLimitedTo] = useState<number | null>(null);
 
   const setBorder = (patch: Partial<BorderConfig>) => dispatch({ type: 'setBorder', patch });
-  const floor = borderInsetFloor(border, shape);
-  const limited = limitedTo !== null && limitedTo === floor && border.insetMm === floor;
+  const edgeMm = edgeInsetMm(project);
+  const floor = borderInsetFloor(border, shape, edgeMm);
+  // A typed inset below the floor, or in 3D an edge grown under the line, leaves the inset on the floor.
+  const limited = border.insetMm === floor && ((limitedTo !== null && limitedTo === floor) || (edgeMm > 0 && floor > borderInsetFloor(border, shape)));
   const tooDeep = resolved.warnings.find((w) => w.code === 'borderTooDeep');
   const customIcon = useMemo(() => (border.motifSvg ? iconPath(border.motifSvg) : null), [border.motifSvg]);
 

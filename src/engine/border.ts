@@ -43,17 +43,18 @@ export const DEFAULT_BORDER: BorderConfig = {
 
 /**
  * Keeps the border line inside the badge: its middle sits at least half a line width from the
- * edge, and on a scallop badge at least one scallop deep, since a shallower line breaks into pieces
- * at the notches. Returns `border` itself when nothing needs limiting.
+ * edge, on a scallop badge at least one scallop deep, since a shallower line breaks into pieces
+ * at the notches, and on a 3D badge with an edge of `edgeMm` all of the line on the flat top.
+ * Returns `border` itself when nothing needs limiting.
  */
-export function clampBorder(border: BorderConfig, shape: ShapeConfig): BorderConfig {
-  const floor = borderInsetFloor(border, shape);
+export function clampBorder(border: BorderConfig, shape: ShapeConfig, edgeMm = 0): BorderConfig {
+  const floor = borderInsetFloor(border, shape, edgeMm);
   return border.insetMm >= floor ? border : { ...border, insetMm: floor };
 }
 
-/** The shallowest inset `clampBorder` allows for this line width and shape. */
-export function borderInsetFloor(border: BorderConfig, shape: ShapeConfig): number {
-  return Math.max(border.widthMm / 2, shape.kind === 'scallop' ? shape.scallopMm : 0);
+/** The shallowest inset `clampBorder` allows for this line width, shape, and 3D edge. */
+export function borderInsetFloor(border: BorderConfig, shape: ShapeConfig, edgeMm = 0): number {
+  return Math.max(border.widthMm / 2, shape.kind === 'scallop' ? shape.scallopMm : 0, edgeMm > 0 ? edgeMm + border.widthMm / 2 : 0);
 }
 
 export interface BorderGeometry {

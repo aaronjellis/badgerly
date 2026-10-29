@@ -1,7 +1,8 @@
 import React from 'react';
-import { exportFormats } from '../../state/exportFlow';
+import { exportFormats, projectSlug } from '../../state/exportFlow';
 import type { ExportFormatId, ExportResult } from '../../state/exportFlow';
 import { FORMAT_ICON } from '../exportIcons';
+import { Field } from '../Field';
 import type { SectionProps } from './types';
 
 /** What the Export section needs beyond the project: the export action and how the last one went. */
@@ -14,11 +15,21 @@ export interface ExportControls {
 
 interface ExportSectionProps extends SectionProps, ExportControls {}
 
-/** The formats this badge offers as buttons, how the last export went, and every warning the badge has now. */
-export const ExportSection: React.FC<ExportSectionProps> = ({ project, resolved, relief, onExport, status, busy }) => {
+/** The project name the files are named after, the formats this badge offers as buttons, how the last export went, and every warning the badge has now. */
+export const ExportSection: React.FC<ExportSectionProps> = ({ project, dispatch, resolved, relief, onExport, status, busy }) => {
   const warnings = [...new Set([...resolved.warnings, ...(relief?.warnings ?? [])].map((w) => w.message))];
   return (
     <>
+      <Field label="Name" hint={`Downloads and saved files start with “${projectSlug(project.name)}”.`}>
+        <input
+          type="text"
+          className="ph-no-capture"
+          value={project.name}
+          aria-label="Project name"
+          onChange={(e) => dispatch({ type: 'set', patch: { name: e.target.value } })}
+        />
+      </Field>
+
       <div className="export-list">
         {exportFormats(project).map((f) => {
           const Icon = FORMAT_ICON[f.id];
