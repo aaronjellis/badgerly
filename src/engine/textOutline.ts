@@ -66,6 +66,8 @@ export interface TextOutline {
   /** The left edge of each cluster's first glyph, one per cluster per line, in order. */
   clusters: { line: number; index: number; xPx: number }[];
   lines: number;
+  /** Each line's baseline y, in order. */
+  baselinesPx: number[];
 }
 
 /** The text's lines. */
@@ -156,9 +158,10 @@ function layoutText(config: TextConfig, fonts: TextFont[]) {
 
   const commands: OutlineCommand[] = [];
   const clusters: TextOutline['clusters'] = [];
+  const baselinesPx = lines.map((_, i) => top + i * step);
   lines.forEach((l, i) => {
     const x0 = config.align === 'center' ? (maxW - l.width) / 2 : config.align === 'right' ? maxW - l.width : 0;
-    const baseline = top + i * step;
+    const baseline = baselinesPx[i];
     const seen = new Set<number>();
     for (const g of l.glyphs) {
       const dx = x0 + l.shift(g.cluster);
@@ -169,7 +172,7 @@ function layoutText(config: TextConfig, fonts: TextFont[]) {
       }
     }
   });
-  return { commands, clusters, lines: lines.length };
+  return { commands, clusters, lines: lines.length, baselinesPx };
 }
 
 /**
@@ -254,7 +257,7 @@ export function capHeightPx(font: TextFont, sizePx: number): number {
 
 /** The text's merged outline in px at `TEXT_RENDER_SIZE_PX`, no edge more than `tolPx` off its curve. */
 export function buildTextOutline(config: TextConfig, fonts: TextFont[], tolPx: number): TextOutline {
-  const { commands, clusters, lines } = layoutText(config, fonts);
+  const { commands, clusters, lines, baselinesPx } = layoutText(config, fonts);
   // Clipper's units are 1/1000 px here, the same scale `fromPaths64` divides by for mm.
   const poly = fromPaths64(mergeContours(flattenCommands(commands, tolPx)));
   return {
@@ -263,5 +266,6 @@ export function buildTextOutline(config: TextConfig, fonts: TextFont[], tolPx: n
     ink: bounds(poly) ?? { x: 0, y: 0, w: 0, h: 0 },
     clusters,
     lines,
+    baselinesPx,
   };
 }
