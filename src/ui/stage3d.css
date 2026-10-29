@@ -1,0 +1,38 @@
+/* The 3D stage: its HUD is the 2D stage's (viewport2d.css); the canvas fills the stage, and on a wide
+   stage the HUD steps aside for the view cube in the top-right corner. */
+
+.stage3d-canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.stage3d-canvas canvas {
+  display: block;
+  touch-action: none;
+}
+
+.stage3d .viewport-2d-hud {
+  /* The cube's box: 98 px and its 0.5 rem inset. */
+  right: calc(98px + 1rem);
+}
+
+/* A narrow stage has one HUD row across the top, so the cube sits below it. */
+@container (width < 560px) {
+  .stage3d .viewport-2d-hud {
+    right: 0;
+  }
+
+  .stage3d .view-cube {
+    top: 3rem;
+  }
+}
+
+.stage3d-unavailable {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  color: var(--stage-ink);
+  text-align: center;
+}

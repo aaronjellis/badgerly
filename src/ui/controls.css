@@ -975,3 +975,31 @@
   font-size: 1.0625rem;
   text-overflow: ellipsis;
 }
+
+/* ---------- layers and relief ---------- */
+
+.layer-row {
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.layer-row .btn {
+  justify-self: start;
+}
+
+.relief-notes {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.layer-row-title {
+  color: var(--ink);
+  font-size: var(--fs-label);
+  font-weight: var(--w-medium);
+}

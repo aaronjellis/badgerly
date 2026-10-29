@@ -94,6 +94,8 @@ interface Stage2DProps {
   fonts: FontProvider;
   /** Whether the selected text shows a handle for each letter pair. */
   adjustPairs: boolean;
+  /** The 2D and 3D buttons in 3D print mode, shown in the HUD's toggles row. */
+  viewToggle?: React.ReactNode;
 }
 
 /**
@@ -101,7 +103,7 @@ interface Stage2DProps {
  * with the arrow keys, and corner handles that scale the selected element. Badge coordinates are the SVG's
  * coordinates, so the stage only chooses which part of them the viewBox shows.
  */
-export const Stage2D: React.FC<Stage2DProps> = ({ project, resolved, selectedId, onSelect, dispatch, unit, fonts, adjustPairs }) => {
+export const Stage2D: React.FC<Stage2DProps> = ({ project, resolved, selectedId, onSelect, dispatch, unit, fonts, adjustPairs, viewToggle }) => {
   const [view, setView] = useState<View>(HOME);
   const [size, setSize] = useState({ w: 800, h: 600 });
   const [showLayout, setShowLayout] = useState(false);
@@ -506,17 +508,20 @@ export const Stage2D: React.FC<Stage2DProps> = ({ project, resolved, selectedId,
             <span className="hud-chip">{layout ? 'Layout' : 'Badge'} {sizeLabel(content.w, content.h, unit)}</span>
           </div>
 
-          {stacked && (
+          {(stacked || viewToggle) && (
             <div className="hud-toggles" role="group" aria-label="Stage view">
-              <button
-                type="button"
-                className="hud-toggle"
-                aria-pressed={showLayout}
-                onClick={() => setShowLayout((on) => !on)}
-                title="Show the pieces side by side, as the export lays them out"
-              >
-                Show layout
-              </button>
+              {viewToggle}
+              {stacked && (
+                <button
+                  type="button"
+                  className="hud-toggle"
+                  aria-pressed={showLayout}
+                  onClick={() => setShowLayout((on) => !on)}
+                  title="Show the pieces side by side, as the export lays them out"
+                >
+                  Show layout
+                </button>
+              )}
             </div>
           )}
         </div>

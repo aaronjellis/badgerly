@@ -8,6 +8,7 @@ import './ui/app.css';
 import './ui/controls.css';
 import './ui/viewport2d.css';
 import './ui/stage2d.css';
+import './ui/stage3d.css';
 import './ui/fontPicker.css';
 import './ui/phone.css';
 

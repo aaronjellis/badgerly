@@ -7,6 +7,8 @@ import { PartsRow } from './PartsRow';
 import { Section } from './Section';
 import { BorderSection } from './sections/BorderSection';
 import { ElementsSection } from './sections/ElementsSection';
+import { LayersSection } from './sections/LayersSection';
+import { ReliefSection } from './sections/ReliefSection';
 import { ShapeSection } from './sections/ShapeSection';
 import type { SectionProps } from './sections/types';
 
@@ -129,6 +131,10 @@ export const Inspector: React.FC<InspectorProps> = ({
                 <BorderSection {...sectionProps} />
               ) : part.id === 'elements' ? (
                 <ElementsSection {...sectionProps} />
+              ) : part.id === 'layers' ? (
+                <LayersSection {...sectionProps} />
+              ) : part.id === 'relief' ? (
+                <ReliefSection {...sectionProps} />
               ) : null}
             </Section>
           );
