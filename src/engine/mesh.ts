@@ -68,8 +68,9 @@ function pushTri(out: number[], a: Pt, za: number, b: Pt, zb: number, c: Pt, zc:
 /**
  * The flat face of `poly` at height `z`, normal +z when `faceUp`, -z otherwise. Triangulated with
  * earcut on the poly's own points, so its boundary edges match `wallMesh` and `loftMesh` exactly.
- * Expects contours without repeated or collinear points (as Clipper returns them): earcut drops
- * such points, which would leave a T-junction.
+ * Expects contours without repeated or collinear points (as Clipper returns them). Earcut can
+ * still drop a point that its hole bridges leave on a straight run (several holes along one line,
+ * such as letters on a baseline); `restoreSkipped` puts such points back.
  */
 export function capMesh(poly: Poly, z: number, faceUp: boolean): Mesh {
   const positions: number[] = [];
@@ -84,25 +85,79 @@ export function capMesh(poly: Poly, z: number, faceUp: boolean): Mesh {
         coords.push(p.x, p.y);
       }
     });
-    const tris = earcut(coords, holes);
+    const indices = earcut(coords, holes);
+    const tris: Pt[][] = [];
+    for (let t = 0; t < indices.length; t += 3) tris.push([pts[indices[t]], pts[indices[t + 1]], pts[indices[t + 2]]]);
     // Earcut winds all triangles alike; read its orientation from the total and flip to suit.
     let total = 0;
-    for (let t = 0; t < tris.length; t += 3) {
-      const a = pts[tris[t]];
-      const b = pts[tris[t + 1]];
-      const c = pts[tris[t + 2]];
-      total += (b.x - a.x) * (c.y - a.y) - (c.x - a.x) * (b.y - a.y);
-    }
+    for (const [a, b, c] of tris) total += (b.x - a.x) * (c.y - a.y) - (c.x - a.x) * (b.y - a.y);
     const flip = total > 0 !== faceUp;
-    for (let t = 0; t < tris.length; t += 3) {
-      const a = pts[tris[t]];
-      const b = pts[tris[t + 1]];
-      const c = pts[tris[t + 2]];
+    for (const [a, b, c] of restoreSkipped(group, tris)) {
       if (flip) pushTri(positions, a, z, c, z, b, z);
       else pushTri(positions, a, z, b, z, c, z);
     }
   }
   return { positions };
+}
+
+const ptKey = (p: Pt) => `${p.x},${p.y}`;
+const edgeKey = (a: Pt, b: Pt) => {
+  const ka = ptKey(a);
+  const kb = ptKey(b);
+  return ka < kb ? `${ka}|${kb}` : `${kb}|${ka}`;
+};
+
+/**
+ * Splits every triangle whose outer edge skips contour points that lie on it, so the cap's
+ * boundary runs through every point of its contours. An outer edge is one no other triangle
+ * shares; it is fine when it is a contour edge, and otherwise earcut dropped the points between
+ * its ends (they are exactly on it, within 1e-6 mm). Keeps each triangle's winding.
+ */
+function restoreSkipped(group: Pt[][], tris: Pt[][]): Pt[][] {
+  const contourEdges = new Set<string>();
+  for (const c of group) for (let i = 0; i < c.length; i++) contourEdges.add(edgeKey(c[i], c[(i + 1) % c.length]));
+  const uses = new Map<string, number>();
+  for (const t of tris) for (let e = 0; e < 3; e++) {
+    const k = edgeKey(t[e], t[(e + 1) % 3]);
+    uses.set(k, (uses.get(k) ?? 0) + 1);
+  }
+  const skipped = new Set<string>();
+  for (const [k, n] of uses) if (n === 1 && !contourEdges.has(k)) skipped.add(k);
+  if (skipped.size === 0) return tris;
+  const points = group.flat();
+  /** The contour points strictly inside a–b, ordered from a. */
+  const onEdge = (a: Pt, b: Pt): Pt[] => {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len2 = dx * dx + dy * dy;
+    const found: { p: Pt; t: number }[] = [];
+    for (const p of points) {
+      const t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2;
+      if (t <= 0 || t >= 1) continue;
+      const cross = (p.x - a.x) * dy - (p.y - a.y) * dx;
+      if (cross * cross <= 1e-12 * len2) found.push({ p, t });
+    }
+    return found.sort((u, v) => u.t - v.t).map((f) => f.p);
+  };
+  const out: Pt[][] = [];
+  const queue = [...tris];
+  while (queue.length > 0) {
+    const tri = queue.pop()!;
+    let split = false;
+    for (let e = 0; e < 3 && !split; e++) {
+      const a = tri[e];
+      const b = tri[(e + 1) % 3];
+      const c = tri[(e + 2) % 3];
+      if (!skipped.has(edgeKey(a, b))) continue;
+      const mids = onEdge(a, b).filter((p) => p !== c);
+      if (mids.length === 0) continue;
+      const run = [a, ...mids, b];
+      for (let i = 0; i + 1 < run.length; i++) queue.push([run[i], run[i + 1], c]);
+      split = true;
+    }
+    if (!split) out.push(tri);
+  }
+  return out;
 }
 
 /**

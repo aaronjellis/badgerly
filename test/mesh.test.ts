@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { difference, offset, union } from '../src/engine/geom';
+import { area, difference, offset, union } from '../src/engine/geom';
 import type { Poly } from '../src/engine/geom';
 import {
   RingMismatchError,
@@ -79,6 +79,12 @@ describe('mesh', () => {
     expect(isClosed(m)).toBe(true);
     expect(signedVolume(m)).toBeGreaterThan(200 + 64);
     expect(signedVolume(m)).toBeLessThan(200 + 100);
+  });
+  it('a cap keeps hole points that line up across holes, as letters do on a baseline', () => {
+    const ring = difference(sq(40), union([2, 6, 10, 14].map((x) => sqAt(2, x, 6))));
+    const solid = mergeMeshes([capMesh(ring, 0, false), wallMesh(ring, 0, 2), capMesh(ring, 2, true)]);
+    expect(isClosed(solid)).toBe(true);
+    expect(signedVolume(solid)).toBeCloseTo(area(ring) * 2, 6);
   });
   it('isClosed is false for a single open quad', () => {
     const quad = { positions: [0,0,0, 1,0,0, 1,1,0,  0,0,0, 1,1,0, 0,1,0] };
