@@ -14,12 +14,17 @@
  */
 import { area, bounds, contains, difference, intersect, offset, union } from './geom';
 import type { Poly, Pt } from './geom';
-import { capMesh, mergeMeshes, wallMesh } from './mesh';
+import { capMesh, mergeMeshes, mirrorY, wallMesh } from './mesh';
 import type { Mesh } from './mesh';
 import type { BadgeProject, ReliefConfig } from './model';
 import { plateBody } from './plate';
 import type { ResolvedBadge, Warning } from './resolve';
 
+/**
+ * Both meshes are in the printer's frame: x to the right, y toward the back (the badge's top edge),
+ * z up from the bed. That is the 2D badge's y negated, so the badge reads correctly from above and
+ * an STL of it prints the right way round.
+ */
 export interface ReliefResult {
   plate: Mesh;
   /** The drop-in parts of a split badge, standing on the bed; null without a split. */
@@ -255,8 +260,9 @@ export function buildRelief(project: BadgeProject, resolved: ResolvedBadge, tolM
   if (border.length > 0 && project.border.relief === 'deboss') sunkMm.push(project.border.reliefMm);
 
   return {
-    plate: mergeMeshes([...body.meshes, ...topMeshes(flat, cells, plateMm)]),
-    parts,
+    // Built in the 2D frame (y down); returned in the printer's (y up, the badge's top at the back).
+    plate: mirrorY(mergeMeshes([...body.meshes, ...topMeshes(flat, cells, plateMm)])),
+    parts: parts && mirrorY(parts),
     clamped: {
       edgeMm: project.relief.edge !== 'none' && relief.edgeMm !== project.relief.edgeMm ? relief.edgeMm : null,
       debossMm: sunkMm.some((mm) => mm > maxDeboss) ? maxDeboss : null,

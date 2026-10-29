@@ -3,8 +3,9 @@
  * offset rings, and edge profiles. Pieces that share a ring share its exact points, so merging
  * them yields a watertight mesh without any 3D boolean.
  *
- * Frame: x and y are badge mm (y down, as in the 2D frame), z is up from the bed. The frame is
- * right-handed, so a Clipper outer contour (positive area) runs counter-clockwise seen from +z.
+ * Frame while building: x and y are badge mm (y down, as in the 2D frame), z is up from the bed. The
+ * frame is right-handed, so a Clipper outer contour (positive area) runs counter-clockwise seen from +z.
+ * `mirrorY` turns a finished mesh into the printer's frame (y up, the badge's top at the back).
  * Winding is outward: the right-hand normal of each triangle points out of the solid, and a closed
  * solid has positive signed volume.
  */
@@ -283,6 +284,28 @@ export function edgeProfile(
   }
   out.push({ insetMm: sizeMm, riseMm: sizeMm });
   return out;
+}
+
+/**
+ * The mesh with every y negated, for the printer's frame: badge y runs down the 2D page, a printer's y
+ * runs away from you, so the badge's top edge is its back. Negating one axis mirrors the solid, so the
+ * second and third vertex of each triangle swap to keep the winding, and the normals, outward.
+ */
+export function mirrorY(mesh: Mesh): Mesh {
+  const p = mesh.positions;
+  const positions = new Array<number>(p.length);
+  for (let t = 0; t + 8 < p.length; t += 9) {
+    positions[t] = p[t];
+    positions[t + 1] = -p[t + 1];
+    positions[t + 2] = p[t + 2];
+    positions[t + 3] = p[t + 6];
+    positions[t + 4] = -p[t + 7];
+    positions[t + 5] = p[t + 8];
+    positions[t + 6] = p[t + 3];
+    positions[t + 7] = -p[t + 4];
+    positions[t + 8] = p[t + 5];
+  }
+  return { positions };
 }
 
 export function mergeMeshes(meshes: Mesh[]): Mesh {

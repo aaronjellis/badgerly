@@ -1,15 +1,17 @@
-import React, { useState } from 'react';
+import React, { Suspense, lazy, useState } from 'react';
 import { useProject } from './state/useProject';
 import { useRelief } from './state/useRelief';
 import { AppBar } from './ui/AppBar';
 import { Inspector } from './ui/Inspector';
 import { Stage2D } from './ui/Stage2D';
-import { Stage3D } from './ui/Stage3D';
 import { StageViewToggle } from './ui/StageViewToggle';
 import type { StageView } from './ui/StageViewToggle';
 import { partsLiftMm } from './ui/stage3dMath';
 import { partsForMode } from './ui/parts';
 import type { PartId } from './ui/parts';
+
+/** three.js comes in with the 3D stage, the first time it shows. */
+const Stage3D = lazy(() => import('./ui/Stage3D').then((m) => ({ default: m.Stage3D })));
 
 /** Layers and relief take the same step, so a mode switch carries an open one across. */
 const COUNTERPART: Partial<Record<PartId, PartId>> = { layers: 'relief', relief: 'layers' };
@@ -65,12 +67,14 @@ export function App() {
       />
       <div className="app-body">
         {relief && stageView === '3d' ? (
-          <Stage3D
-            meshes={relief}
-            partsLiftMm={partsLiftMm(project.relief.plateMm, relief.clamped.recessMm ?? project.relief.recessMm)}
-            unit={project.unit}
-            viewToggle={viewToggle}
-          />
+          <Suspense fallback={<div className="stage"><p className="stage3d-note" role="status">Loading 3D view</p></div>}>
+            <Stage3D
+              meshes={relief}
+              partsLiftMm={partsLiftMm(project.relief.plateMm, relief.clamped.recessMm ?? project.relief.recessMm)}
+              unit={project.unit}
+              viewToggle={viewToggle}
+            />
+          </Suspense>
         ) : (
           <Stage2D project={project} resolved={resolved} selectedId={selectedId} onSelect={setSelectedId} dispatch={dispatch} unit={project.unit} fonts={fonts} adjustPairs={adjustPairs} viewToggle={relief ? viewToggle : undefined} />
         )}

@@ -9,13 +9,13 @@ const normal = (p: ArrayLike<number>, t = 0): [number, number, number] => {
 };
 
 describe('toSceneTriangles', () => {
-  // A triangle on the bed whose normal is +z (up) in the badge frame.
+  // A triangle on the bed whose normal is +z (up) in the printer frame.
   const up = [0, 0, 0, 4, 0, 0, 0, 3, 0];
 
-  it('puts badge z up the scene and badge y toward the viewer', () => {
+  it('turns the printer frame into the scene: z up, y (the back) away from the viewer', () => {
     const out = toSceneTriangles([0, 0, 0, 1, 0, 0, 0, 2, 5], 0);
-    // The second and third vertices swap, to keep the winding outward after the reflection.
-    expect(Array.from(out)).toEqual([0, 0, 0, 0, 5, 2, 1, 0, 0]);
+    // `+ 0` turns the −0 of a negated zero into 0, which `toEqual` tells apart.
+    expect(Array.from(out, (v) => v + 0)).toEqual([0, 0, 0, 1, 0, 0, 0, 5, -2]);
   });
 
   it('keeps a face that looks up looking up', () => {
@@ -26,8 +26,8 @@ describe('toSceneTriangles', () => {
     expect(nz).toBeCloseTo(0);
   });
 
-  it('keeps a face that looks along badge +x looking along scene +x', () => {
-    // Normal +x in the badge frame: (0,0,0) → (0,1,0) → (0,0,1).
+  it('keeps a face that looks along +x looking along scene +x', () => {
+    // Normal +x in the printer frame: (0,0,0) → (0,1,0) → (0,0,1).
     const out = toSceneTriangles([0, 0, 0, 0, 1, 0, 0, 0, 1], 0);
     const [nx, ny, nz] = normal(out);
     expect(nx).toBeGreaterThan(0);

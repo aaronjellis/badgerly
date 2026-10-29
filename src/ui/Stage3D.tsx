@@ -304,7 +304,7 @@ export const Stage3D: React.FC<Stage3DProps> = ({ meshes, partsLiftMm, unit, vie
 
       <div ref={containerRef} className="stage3d-canvas" />
       {unavailable && (
-        <p className="stage3d-unavailable" role="alert">
+        <p className="stage3d-note" role="alert">
           This browser can’t show 3D. Switch to 2D to keep editing.
         </p>
       )}

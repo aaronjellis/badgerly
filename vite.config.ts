@@ -9,6 +9,8 @@ export default defineConfig({
     emptyOutDir: true,
     // HarfBuzz (text outlines for export) starts its WebAssembly with a top-level await.
     target: 'es2022',
+    // The 3D stage loads on demand and is three.js, about 504 kB; the main bundle stays far under.
+    chunkSizeWarningLimit: 600,
   },
   // Pre-bundling would move HarfBuzz away from the .wasm file it loads beside itself.
   optimizeDeps: {

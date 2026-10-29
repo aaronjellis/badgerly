@@ -206,4 +206,35 @@ describe('relief', () => {
     expect(deboss.map(e => e.mm)).toEqual([2.6]);
     expect(area(emboss[0].poly)).toBeCloseTo(area(r.elements[0].poly), 0);
   });
+  it('is y-up like a printer bed: a feature at the upper right of the 2D badge lands back right', () => {
+    const { p, r } = r3d(p => {
+      p.elements = [{ ...svgGraphic('<rect width="3" height="40"/>', 6, 6), x: 20, y: -10 }];
+      p.border.style = 'none';
+    }, 0.05);
+    const out = buildRelief(p, r, 0.05);
+    expect(isClosed(out.plate)).toBe(true);
+    expect(signedVolume(out.plate)).toBeGreaterThan(0);
+    // The raised face is the only geometry above the 3 mm flat top.
+    const top: { x: number; y: number }[] = [];
+    for (let k = 0; k < out.plate.positions.length; k += 3) {
+      if (out.plate.positions[k + 2] > 3.5) top.push({ x: out.plate.positions[k], y: out.plate.positions[k + 1] });
+    }
+    expect(top.length).toBeGreaterThan(0);
+    const mean = (f: (q: { x: number; y: number }) => number) => top.reduce((a, q) => a + f(q), 0) / top.length;
+    expect(mean((q) => q.x)).toBeCloseTo(20, 0);
+    expect(mean((q) => q.y)).toBeCloseTo(10, 0);
+  });
+  it('mirrors the parts of a split the same way', () => {
+    const { p, r } = r3d(p => {
+      p.elements = [{ ...svgGraphic('<rect width="3" height="40"/>', 6, 6), x: 20, y: -10 }];
+      p.border.style = 'none';
+      p.relief.split = true;
+    }, 0.05);
+    const parts = buildRelief(p, r, 0.05).parts!;
+    expect(isClosed(parts)).toBe(true);
+    expect(signedVolume(parts)).toBeGreaterThan(0);
+    const ys: number[] = [];
+    for (let k = 1; k < parts.positions.length; k += 3) ys.push(parts.positions[k]);
+    expect(Math.min(...ys)).toBeGreaterThan(0);
+  });
 });

@@ -8,6 +8,7 @@ import {
   isClosed,
   loftMesh,
   mergeMeshes,
+  mirrorY,
   signedVolume,
   wallMesh,
 } from '../src/engine/mesh';
@@ -103,5 +104,20 @@ describe('mesh', () => {
     expect(view.getUint32(80, true)).toBe(n);
     expect(view.getFloat32(84 + 8, true)).toBeCloseTo(1);
     expect(view.getUint16(84 + 48, true)).toBe(0);
+  });
+
+  it('mirrorY flips y and keeps a closed solid closed and outward', () => {
+    const cube = mergeMeshes([capMesh(sq(10), 0, false), wallMesh(sq(10), 0, 10), capMesh(sq(10), 10, true)]);
+    const m = mirrorY(cube);
+    expect(isClosed(m)).toBe(true);
+    expect(signedVolume(m)).toBeCloseTo(1000, 3);
+    expect(signedVolume(m)).toBeCloseTo(signedVolume(cube), 6);
+  });
+  it('mirrorY negates y only and leaves the input alone', () => {
+    const tri = { positions: [0, 1, 2, 3, 4, 5, 6, 7, 8] };
+    const m = mirrorY(tri);
+    // The second and third vertices swap, so the winding reverses along with the mirror.
+    expect(m.positions).toEqual([0, -1, 2, 6, -7, 8, 3, -4, 5]);
+    expect(tri.positions).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);
   });
 });

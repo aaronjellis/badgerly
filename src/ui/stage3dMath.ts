@@ -10,24 +10,17 @@ export interface Vec3 {
 }
 
 /**
- * A mesh from the engine as scene triangles. The engine's frame has x and y as badge mm (y down, as in
- * the 2D view) and z up from the bed. The scene is y-up with the badge's top edge away from the viewer,
- * so scene (x, y, z) is the mesh's (x, z, y): a reflection, which also turns a badge that would read
- * mirrored from above into one that reads upright. The reflection flips every triangle's winding, so
- * the second and third vertices swap to keep it outward. `liftMm` raises the whole mesh.
+ * A mesh from the engine as scene triangles. The engine's frame is the printer's: x right, y toward the
+ * back (the badge's top edge), z up from the bed. The scene is y-up with z toward the viewer, so scene
+ * (x, y, z) is the mesh's (x, z, −y): a plain rotation, which keeps every triangle's winding. `liftMm`
+ * raises the whole mesh.
  */
 export function toSceneTriangles(positions: ArrayLike<number>, liftMm: number): Float32Array {
-  const triangles = Math.floor(positions.length / 9);
-  const out = new Float32Array(triangles * 9);
-  const order = [0, 2, 1];
-  for (let t = 0; t < triangles; t++) {
-    for (let slot = 0; slot < 3; slot++) {
-      const from = t * 9 + order[slot] * 3;
-      const to = t * 9 + slot * 3;
-      out[to] = positions[from];
-      out[to + 1] = positions[from + 2] + liftMm;
-      out[to + 2] = positions[from + 1];
-    }
+  const out = new Float32Array(Math.floor(positions.length / 9) * 9);
+  for (let i = 0; i < out.length; i += 3) {
+    out[i] = positions[i];
+    out[i + 1] = positions[i + 2] + liftMm;
+    out[i + 2] = -positions[i + 1];
   }
   return out;
 }
