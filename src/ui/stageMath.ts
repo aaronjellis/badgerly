@@ -1,6 +1,7 @@
 /** Pure geometry for the 2D stage: scale-handle math, the loading-text box, and the stacked layout's slots. */
 import type { Rect } from '../engine/geom';
 import type { TextElement } from '../engine/model';
+import { TEXT_RENDER_SIZE_PX } from '../engine/textOutline';
 
 /** A capital letter's height as a share of the font size, for text drawn before its outline arrives. */
 export const FALLBACK_CAP_EM = 0.7;
@@ -56,4 +57,45 @@ export function pieceSlots(rects: (Rect | null)[], gapMm: number): { dx: number[
   });
   const placed = rects.some((b) => b !== null);
   return { dx, bounds: placed ? { x: 0, y: top, w: cursor - gapMm, h: bottom - top } : null };
+}
+
+/**
+ * How many em a drag of `dxMm` along the text moves a letter pair. The outline is built at one em of
+ * `TEXT_RENDER_SIZE_PX` px, and scaled so its caps are `capHeightMm` tall instead of `outlineCapPx`.
+ */
+export function kerningDeltaEm(dxMm: number, capHeightMm: number, outlineCapPx: number): number {
+  if (!(capHeightMm > 0) || !(outlineCapPx > 0)) return 0;
+  return dxMm / ((capHeightMm / outlineCapPx) * TEXT_RENDER_SIZE_PX);
+}
+
+/** A pointer move of (`dxMm`, `dyMm`) on the stage, measured along text turned `rotationDeg`. */
+export function alongText(dxMm: number, dyMm: number, rotationDeg: number): number {
+  const a = (rotationDeg * Math.PI) / 180;
+  return dxMm * Math.cos(a) + dyMm * Math.sin(a);
+}
+
+/**
+ * A pair value after a change, to the ten-thousandth of an em so repeated 0.01 steps do not
+ * collect float noise.
+ */
+export const addPairEm = (current: number | undefined, deltaEm: number): number => Math.round(((current ?? 0) + deltaEm) * 1e4) / 1e4;
+
+export interface KerningHandle {
+  /** The `pairAdjustEm` key this handle edits: the line and the index where the pair starts. */
+  key: string;
+  x: number;
+  y: number;
+}
+
+/**
+ * One handle per cluster except each line's first, at that cluster's start. It edits the pair that
+ * begins at the cluster before it, so dragging it moves that cluster and every one after it.
+ */
+export function kerningHandles(clusters: { line: number; index: number; x: number; y: number }[]): KerningHandle[] {
+  const handles: KerningHandle[] = [];
+  clusters.forEach((c, i) => {
+    const prev = clusters[i - 1];
+    if (prev && prev.line === c.line) handles.push({ key: `${c.line}:${prev.index}`, x: c.x, y: c.y });
+  });
+  return handles;
 }

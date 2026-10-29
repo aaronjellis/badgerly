@@ -900,3 +900,78 @@
 .visually-hidden-input {
   display: none;
 }
+
+/* ---------- elements ---------- */
+
+.element-list {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.element-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: var(--control-h);
+  padding: 0 0.6rem;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-control);
+  cursor: pointer;
+}
+
+.element-row:hover {
+  background: var(--sunken);
+}
+
+.element-row[aria-pressed='true'] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.element-row svg {
+  color: var(--muted);
+}
+
+.element-row-name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.element-row-role {
+  padding: 0.1rem 0.5rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: var(--w-medium);
+  background: var(--sunken);
+  border-radius: var(--r-pill);
+}
+
+.element-editor {
+  display: grid;
+  gap: 0.75rem;
+  min-width: 0;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
+}
+
+/* The Font button shows the family in its own face. */
+.font-button {
+  justify-content: flex-start;
+  width: 100%;
+}
+
+.font-button-name {
+  overflow: hidden;
+  font-size: 1.0625rem;
+  text-overflow: ellipsis;
+}

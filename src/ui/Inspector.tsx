@@ -6,6 +6,7 @@ import type { PartDef, PartId } from './parts';
 import { PartsRow } from './PartsRow';
 import { Section } from './Section';
 import { BorderSection } from './sections/BorderSection';
+import { ElementsSection } from './sections/ElementsSection';
 import { ShapeSection } from './sections/ShapeSection';
 import type { SectionProps } from './sections/types';
 
@@ -122,7 +123,13 @@ export const Inspector: React.FC<InspectorProps> = ({
               next={!query && next ? { title: next.label, onGo: () => onSelectPart(next.id) } : undefined}
               last={!query && !next}
             >
-              {part.id === 'shape' ? <ShapeSection {...sectionProps} /> : part.id === 'border' ? <BorderSection {...sectionProps} /> : null}
+              {part.id === 'shape' ? (
+                <ShapeSection {...sectionProps} />
+              ) : part.id === 'border' ? (
+                <BorderSection {...sectionProps} />
+              ) : part.id === 'elements' ? (
+                <ElementsSection {...sectionProps} />
+              ) : null}
             </Section>
           );
         })}

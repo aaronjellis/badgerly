@@ -1,5 +1,6 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch } from 'react';
+import type { FontProvider } from '../engine/fontProvider';
 import { bounds, polyToSvgPath } from '../engine/geom';
 import type { Pt, Rect } from '../engine/geom';
 import { CUT, laserPieces, pieceBounds } from '../engine/laserExport';
@@ -8,9 +9,10 @@ import type { BadgeElement, BadgeProject, DisplayUnit, TextElement } from '../en
 import type { ResolvedBadge, ResolvedElement } from '../engine/resolve';
 import { guideLines, snapMove } from '../engine/snapping';
 import type { Guides } from '../engine/snapping';
+import { capHeightPx, TEXT_RENDER_SIZE_PX } from '../engine/textOutline';
 import type { Action } from '../state/reducer';
 import { STAGE_ACCENT_HEX } from './stageColors';
-import { fallbackFontMm, fallbackInk, pieceSlots, round2, scaleFactor, textLines } from './stageMath';
+import { addPairEm, alongText, fallbackFontMm, fallbackInk, kerningDeltaEm, kerningHandles, pieceSlots, round2, scaleFactor, textLines } from './stageMath';
 import { useMediaQuery } from './useMediaQuery';
 
 /** The badge's face on the stage: a step lighter than the stage, so the outline reads against it. */
@@ -35,6 +37,8 @@ const DRAG_START_TOUCH_PX = 8;
 const MIN_SIZE_MM = 1;
 const NUDGE_MM = 0.1;
 const NUDGE_SHIFT_MM = 1;
+/** A kerning handle's arrow-key step, in em. */
+const KERN_STEP_EM = 0.01;
 
 /** Room kept clear around the badge when the view fits it, in px: the HUD sits in the top inset. */
 const FIT = { side: 24, top: 72, bottom: 24 };
@@ -60,11 +64,15 @@ const linesPath = (lines: Pt[][], closed: boolean) =>
 const isTextTarget = (t: EventTarget | null) =>
   t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
 
+/** A button (the zoom controls) keeps its own keys: Delete or an arrow there must not reach the element. */
+const isButtonTarget = (t: EventTarget | null) => t instanceof HTMLElement && t.tagName === 'BUTTON';
+
 type Corner = 'nw' | 'ne' | 'se' | 'sw';
 const CORNERS: Corner[] = ['nw', 'ne', 'se', 'sw'];
 
 type Drag =
-  | { kind: 'move'; id: string; startX: number; startY: number; ink: Rect; guides: Guides; applied: Pt; active: boolean }
+  | { kind: 'move'; id: string; startX: number; startY: number; ink: Rect; guides: Guides; applied: Pt; origin: Pt; active: boolean }
+  | { kind: 'kern'; id: string; key: string; startX: number; startY: number; pair0: number | undefined; outlineCapPx: number }
   | { kind: 'scale'; id: string; center: Pt; startDist: number; orig: { cap: number } | { w: number; h: number } }
   | { kind: 'pan'; startX: number; startY: number; pan0: Pt; moved: boolean };
 
@@ -83,6 +91,9 @@ interface Stage2DProps {
   onSelect: (id: string | null) => void;
   dispatch: Dispatch<Action>;
   unit: DisplayUnit;
+  fonts: FontProvider;
+  /** Whether the selected text shows a handle for each letter pair. */
+  adjustPairs: boolean;
 }
 
 /**
@@ -90,7 +101,7 @@ interface Stage2DProps {
  * with the arrow keys, and corner handles that scale the selected element. Badge coordinates are the SVG's
  * coordinates, so the stage only chooses which part of them the viewBox shows.
  */
-export const Stage2D: React.FC<Stage2DProps> = ({ project, resolved, selectedId, onSelect, dispatch, unit }) => {
+export const Stage2D: React.FC<Stage2DProps> = ({ project, resolved, selectedId, onSelect, dispatch, unit, fonts, adjustPairs }) => {
   const [view, setView] = useState<View>(HOME);
   const [size, setSize] = useState({ w: 800, h: 600 });
   const [showLayout, setShowLayout] = useState(false);
@@ -176,7 +187,7 @@ export const Stage2D: React.FC<Stage2DProps> = ({ project, resolved, selectedId,
       const t = e.target;
       const inStage = t instanceof Node && !!wrapperRef.current?.contains(t);
       const idle = t === document.body || t === document.documentElement || t === null;
-      if ((!inStage && !idle) || isTextTarget(t)) return;
+      if ((!inStage && !idle) || isTextTarget(t) || isButtonTarget(t)) return;
       const step = e.shiftKey ? NUDGE_SHIFT_MM : NUDGE_MM;
       const nudge: Record<string, [number, number]> = {
         ArrowLeft: [-step, 0],
@@ -186,7 +197,8 @@ export const Stage2D: React.FC<Stage2DProps> = ({ project, resolved, selectedId,
       };
       if (nudge[e.key]) {
         e.preventDefault();
-        L.dispatch({ type: 'moveElement', id: L.selectedId, dx: nudge[e.key][0], dy: nudge[e.key][1] });
+        const el = L.project.elements.find((x) => x.id === L.selectedId);
+        if (el) L.dispatch({ type: 'updateElement', id: el.id, patch: { x: round2(el.x + nudge[e.key][0]), y: round2(el.y + nudge[e.key][1]) } });
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault();
         L.dispatch({ type: 'removeElement', id: L.selectedId });
@@ -222,7 +234,7 @@ export const Stage2D: React.FC<Stage2DProps> = ({ project, resolved, selectedId,
     capture(e.pointerId);
     onSelect(el.id);
     // Guides are computed once, from where everything else stands when the drag starts.
-    dragRef.current = { kind: 'move', id: el.id, startX: e.clientX, startY: e.clientY, ink, guides: guideLines(resolved, el.id), applied: { x: 0, y: 0 }, active: false };
+    dragRef.current = { kind: 'move', id: el.id, startX: e.clientX, startY: e.clientY, ink, guides: guideLines(resolved, el.id), applied: { x: 0, y: 0 }, origin: { x: el.x, y: el.y }, active: false };
   };
 
   const startScale = (e: React.PointerEvent, el: BadgeElement) => {
@@ -238,6 +250,34 @@ export const Stage2D: React.FC<Stage2DProps> = ({ project, resolved, selectedId,
       startDist: Math.hypot(p.x - c.x, p.y - c.y),
       orig: el.kind === 'text' ? { cap: el.capHeightMm } : { w: el.widthMm, h: el.heightMm },
     };
+  };
+
+  const startKern = (e: React.PointerEvent, el: TextElement, key: string) => {
+    if (e.button !== 0) return;
+    const set = fonts.get(el.text);
+    if (!set || set.length === 0) return;
+    e.stopPropagation();
+    capture(e.pointerId);
+    dragRef.current = {
+      kind: 'kern',
+      id: el.id,
+      key,
+      startX: e.clientX,
+      startY: e.clientY,
+      pair0: el.text.pairAdjustEm[key],
+      outlineCapPx: capHeightPx(set[0], TEXT_RENDER_SIZE_PX),
+    };
+  };
+
+  /** Left and Right on a focused handle step its pair by 0.01 em; the stage's own keys stay out of it. */
+  const onKernKey = (e: React.KeyboardEvent, el: TextElement, key: string) => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') {
+      if (/^(ArrowUp|ArrowDown|Delete|Backspace)$/.test(e.key)) e.preventDefault();
+      return;
+    }
+    e.preventDefault();
+    const pair = addPairEm(el.text.pairAdjustEm[key], e.key === 'ArrowRight' ? KERN_STEP_EM : -KERN_STEP_EM);
+    dispatch({ type: 'updateElement', id: el.id, patch: { text: { ...el.text, pairAdjustEm: { ...el.text.pairAdjustEm, [key]: pair } } } });
   };
 
   const startPan = (e: React.PointerEvent) => {
@@ -263,13 +303,20 @@ export const Stage2D: React.FC<Stage2DProps> = ({ project, resolved, selectedId,
       const dy = dyPx / scale;
       // Alt turns snapping off.
       const snapped = e.altKey ? { dx, dy, hitX: null, hitY: null } : snapMove(d.ink, dx, dy, d.guides, SNAP_PX / scale);
-      const mx = snapped.dx - d.applied.x;
-      const my = snapped.dy - d.applied.y;
-      if (mx !== 0 || my !== 0) {
-        dispatch({ type: 'moveElement', id: d.id, dx: mx, dy: my });
-        d.applied = { x: snapped.dx, y: snapped.dy };
+      // The position is set from where the drag began, rounded to the hundredth, so repeated moves add no float noise.
+      const ax = round2(snapped.dx);
+      const ay = round2(snapped.dy);
+      if (ax !== d.applied.x || ay !== d.applied.y) {
+        dispatch({ type: 'updateElement', id: d.id, patch: { x: round2(d.origin.x + ax), y: round2(d.origin.y + ay) } });
+        d.applied = { x: ax, y: ay };
       }
       setHit(snapped.hitX, snapped.hitY);
+    } else if (d.kind === 'kern') {
+      const el = live.current.project.elements.find((x) => x.id === d.id);
+      if (el?.kind !== 'text') return;
+      const along = alongText((e.clientX - d.startX) / scale, (e.clientY - d.startY) / scale, el.rotationDeg);
+      const pair = addPairEm(d.pair0, kerningDeltaEm(along, el.capHeightMm, d.outlineCapPx));
+      dispatch({ type: 'updateElement', id: d.id, patch: { text: { ...el.text, pairAdjustEm: { ...el.text.pairAdjustEm, [d.key]: pair } } } });
     } else if (d.kind === 'scale') {
       const p = toMm(e.clientX, e.clientY);
       const dist = Math.hypot(p.x - d.center.x, p.y - d.center.y);
@@ -320,6 +367,10 @@ export const Stage2D: React.FC<Stage2DProps> = ({ project, resolved, selectedId,
   const selectedInk = selected ? inkOf(selected) : null;
   const handleDraw = 9 * px;
   const handleHit = (coarse ? 36 : 20) * px;
+  const kernHandles = useMemo(() => {
+    const r = selected?.kind === 'text' && adjustPairs ? resolvedById.get(selected.id) : undefined;
+    return r ? kerningHandles(r.clusters) : [];
+  }, [selected, adjustPairs, resolvedById]);
 
   const renderElement = (el: BadgeElement) => {
     const r = resolvedById.get(el.id);
@@ -520,6 +571,32 @@ export const Stage2D: React.FC<Stage2DProps> = ({ project, resolved, selectedId,
                 })}
               </g>
             )}
+
+            {selected?.kind === 'text' &&
+              kernHandles.map((h) => {
+                const [line, index] = h.key.split(':').map(Number);
+                const next = Array.from(textLines(selected)[line]?.slice(index + 1) ?? '')[0] ?? '';
+                const value = selected.text.pairAdjustEm[h.key] ?? 0;
+                return (
+                  <g
+                    key={h.key}
+                    className="stage2d-kern"
+                    role="slider"
+                    tabIndex={0}
+                    aria-label={`Space before ${next ? `“${next}”` : 'letter'}`}
+                    aria-orientation="horizontal"
+                    aria-valuemin={-1}
+                    aria-valuemax={1}
+                    aria-valuenow={value}
+                    aria-valuetext={`${value.toFixed(2)} em`}
+                    onPointerDown={(e) => startKern(e, selected, h.key)}
+                    onKeyDown={(e) => onKernKey(e, selected, h.key)}
+                  >
+                    <circle cx={h.x} cy={h.y} r={handleHit / 2} fill="transparent" />
+                    <circle className="stage2d-kern-dot" cx={h.x} cy={h.y} r={handleDraw / 2} fill={STAGE_ACCENT_HEX} stroke={BADGE_FILL} strokeWidth={1} vectorEffect="non-scaling-stroke" pointerEvents="none" />
+                  </g>
+                );
+              })}
 
             {hits && hits.x !== null && (
               <line x1={hits.x} x2={hits.x} y1={vbY} y2={vbY + vbH} stroke={GUIDE} strokeWidth={1} vectorEffect="non-scaling-stroke" pointerEvents="none" />

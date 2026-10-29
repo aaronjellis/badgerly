@@ -14,4 +14,7 @@ export interface SectionProps {
   setSelectedId: (id: string | null) => void;
   resolved: ResolvedBadge;
   fonts: FontProvider;
+  /** Whether the selected text shows a handle for each letter pair on the stage. */
+  adjustPairs: boolean;
+  setAdjustPairs: (on: boolean) => void;
 }

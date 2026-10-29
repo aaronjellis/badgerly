@@ -1,0 +1,195 @@
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { Search, X } from 'lucide-react';
+import type { FontFamily } from '../engine/fontCatalog';
+import { loadPreviewCss } from '../engine/googleFonts';
+import { filterFamilies, pushRecentFont, readRecentFonts } from './fontList';
+import type { CategoryFilter } from './fontList';
+import { PHONE_QUERY, useMediaQuery } from './useMediaQuery';
+
+/** Tiles this far outside the list's view still count as appearing, so their face is ready before they scroll in. */
+const ROOT_MARGIN = '400px';
+/** Families per Google Fonts request. */
+const BATCH = 12;
+
+const CATEGORIES: { value: CategoryFilter; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'sans-serif', label: 'Sans serif' },
+  { value: 'serif', label: 'Serif' },
+  { value: 'display', label: 'Display' },
+  { value: 'handwriting', label: 'Handwriting' },
+  { value: 'monospace', label: 'Monospace' },
+];
+
+/** A family's CSS `font-family` value, with a generic to fall back on until its stylesheet arrives. */
+const faceOf = (f: Pick<FontFamily, 'family' | 'category'>): string =>
+  `"${f.family.replace(/["\\]/g, '')}", ${f.category === 'serif' ? 'serif' : f.category === 'monospace' ? 'monospace' : 'sans-serif'}`;
+
+interface FontPickerProps {
+  /** Every family, or null while the list is loading. */
+  catalog: FontFamily[] | null;
+  /** The family in use. */
+  value: string;
+  /** The text each tile shows in its face. */
+  sampleText: string;
+  onPick: (family: FontFamily) => void;
+  onClose: () => void;
+}
+
+/**
+ * A panel over the inspector (a full-screen sheet on a phone) listing every family as a tile that
+ * shows the sample text in its own face. A tile's stylesheet is requested only as it nears the view.
+ */
+export const FontPicker: React.FC<FontPickerProps> = ({ catalog, value, sampleText, onPick, onClose }) => {
+  const phone = useMediaQuery(PHONE_QUERY);
+  const [query, setQuery] = useState('');
+  const [category, setCategory] = useState<CategoryFilter>('all');
+  const [recent] = useState(() => readRecentFonts());
+  const listRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const observer = useRef<IntersectionObserver | null>(null);
+  const queue = useRef<string[]>([]);
+  const host = useMemo(() => (phone ? document.body : (document.querySelector<HTMLElement>('.inspector') ?? document.body)), [phone]);
+
+  const shown = useMemo(() => (catalog ? filterFamilies(catalog, query, category) : []), [catalog, query, category]);
+  const recentFamilies = useMemo(
+    () => (catalog ? recent.flatMap((name) => catalog.find((f) => f.family === name) ?? []) : []),
+    [catalog, recent]
+  );
+  const sample = sampleText.trim() || 'Aa';
+
+  // Tiles that come within the margin ask for their stylesheet, a dozen families to a request.
+  const flush = useCallback(() => {
+    while (queue.current.length > 0) void loadPreviewCss(queue.current.splice(0, BATCH));
+  }, []);
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list || typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          io.unobserve(entry.target);
+          const family = (entry.target as HTMLElement).dataset.family;
+          if (family) queue.current.push(family);
+        }
+        flush();
+      },
+      { root: list, rootMargin: ROOT_MARGIN }
+    );
+    observer.current = io;
+    // The first tiles mounted before this observer existed.
+    list.querySelectorAll('.font-tile').forEach((el) => io.observe(el));
+    return () => {
+      io.disconnect();
+      observer.current = null;
+    };
+  }, [flush]);
+
+  /** Watches a tile until it has asked for its face. */
+  const watch = useCallback((el: HTMLElement | null) => {
+    if (el) observer.current?.observe(el);
+  }, []);
+
+  // The chosen and recent families show their faces at once.
+  useEffect(() => {
+    void loadPreviewCss([value, ...recent]);
+  }, [value, recent]);
+
+  // Focus moves in on open and back to where it was on close.
+  useEffect(() => {
+    const before = document.activeElement as HTMLElement | null;
+    // A phone's keyboard would cover the list, so only a desktop opens on the search field.
+    if (!phone) searchRef.current?.focus();
+    return () => before?.focus?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const pick = (f: FontFamily) => {
+    pushRecentFont(f.family);
+    onPick(f);
+  };
+
+  const tile = (f: FontFamily, chip: boolean) => (
+    <button
+      key={f.id}
+      ref={chip ? undefined : watch}
+      type="button"
+      className={chip ? 'font-chip' : 'font-tile'}
+      data-family={f.family}
+      aria-pressed={f.family === value}
+      onClick={() => pick(f)}
+    >
+      <span className="font-tile-name">{f.family}</span>
+      <span className="font-tile-sample" style={{ fontFamily: faceOf(f) }}>
+        {sample}
+      </span>
+    </button>
+  );
+
+  return createPortal(
+    <div
+      className={`font-picker${phone ? ' font-picker-sheet' : ''}`}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') {
+          e.stopPropagation();
+          onClose();
+        }
+      }}
+    >
+      <div className="font-picker-backdrop" onClick={onClose} aria-hidden="true" />
+      <div className="font-picker-panel" role="dialog" aria-modal="true" aria-label="Choose a font">
+        <div className="font-picker-head">
+          <div className="inspect-search">
+            <Search size={18} strokeWidth={1.75} className="inspect-search-icon" aria-hidden="true" />
+            <input
+              ref={searchRef}
+              type="search"
+              aria-label="Search fonts"
+              placeholder="Search fonts"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </div>
+          <button type="button" className="icon-btn" aria-label="Close font list" onClick={onClose}>
+            <X size={18} strokeWidth={1.75} aria-hidden="true" />
+          </button>
+        </div>
+
+        <div className="chip-row" role="radiogroup" aria-label="Font category">
+          {CATEGORIES.map((c) => (
+            <button key={c.value} type="button" role="radio" aria-checked={category === c.value} className="chip" onClick={() => setCategory(c.value)}>
+              {c.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="font-picker-list" ref={listRef}>
+          {recentFamilies.length > 0 && query.trim() === '' && category === 'all' && (
+            <section aria-label="Recent fonts">
+              <h3 className="font-picker-heading">Recent</h3>
+              <div className="font-recent-row">{recentFamilies.map((f) => tile(f, true))}</div>
+            </section>
+          )}
+          {catalog === null ? (
+            <p className="helper-note font-picker-note" role="status">
+              Loading fonts…
+            </p>
+          ) : shown.length === 0 ? (
+            <p className="helper-note font-picker-note" role="status">
+              No font matches “{query.trim()}”.
+            </p>
+          ) : (
+            <>
+              <h3 className="font-picker-heading">
+                {shown.length.toLocaleString()} {shown.length === 1 ? 'family' : 'families'}
+              </h3>
+              <div className="font-tile-grid">{shown.map((f) => tile(f, false))}</div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>,
+    host
+  );
+};

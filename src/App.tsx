@@ -12,6 +12,8 @@ const COUNTERPART: Partial<Record<PartId, PartId>> = { layers: 'relief', relief:
 export function App() {
   const { project, dispatch, selectedId, setSelectedId, resolved, fonts } = useProject();
   const [settingQuery, setSettingQuery] = useState('');
+  /** Whether the selected text shows its letter-pair handles on the stage. */
+  const [adjustPairs, setAdjustPairs] = useState(false);
   /** The one open inspector section; null when the user closed it. */
   const [openPart, setOpenPart] = useState<PartId | null>('shape');
   /** Asks the inspector to scroll a part's chip and section into view; `n` makes a repeat count. */
@@ -52,7 +54,7 @@ export function App() {
         projectMenu={{ onNew: () => dispatch({ type: 'new' }), onOpen: () => {}, onSave: () => {}, unsaved: false }}
       />
       <div className="app-body">
-        <Stage2D project={project} resolved={resolved} selectedId={selectedId} onSelect={setSelectedId} dispatch={dispatch} unit={project.unit} />
+        <Stage2D project={project} resolved={resolved} selectedId={selectedId} onSelect={setSelectedId} dispatch={dispatch} unit={project.unit} fonts={fonts} adjustPairs={adjustPairs} />
         <Inspector
           settingQuery={settingQuery}
           onSettingQuery={setSettingQuery}
@@ -62,7 +64,7 @@ export function App() {
           onSelectPart={handleSelectPart}
           onTogglePart={handleTogglePart}
           scrollRequest={scrollRequest}
-          sectionProps={{ project, dispatch, selectedId, setSelectedId, resolved, fonts }}
+          sectionProps={{ project, dispatch, selectedId, setSelectedId, resolved, fonts, adjustPairs, setAdjustPairs }}
         />
       </div>
     </div>

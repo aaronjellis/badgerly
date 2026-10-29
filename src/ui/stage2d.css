@@ -25,3 +25,14 @@
 .stage2d-handle-sw {
   cursor: nesw-resize;
 }
+
+/* A letter-pair handle: grab it and slide along the text. */
+.stage2d-kern {
+  cursor: ew-resize;
+  outline: none;
+}
+
+.stage2d-kern:focus-visible .stage2d-kern-dot {
+  stroke: #fff;
+  stroke-width: 2.5px;
+}
