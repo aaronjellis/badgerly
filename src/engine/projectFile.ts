@@ -9,6 +9,8 @@ import type { TextConfig } from './textOutline';
 
 /** The project file's extension; the file itself is JSON. */
 export const PROJECT_EXTENSION = '.badge';
+/** The thickness a layer takes when the file gives none that makes sense. */
+const DEFAULT_LAYER_MM = 3;
 const FORMAT = 'badgerly-project';
 const VERSION = 1;
 
@@ -24,6 +26,8 @@ type Raw = Record<string, unknown>;
 
 const isRecord = (v: unknown): v is Raw => typeof v === 'object' && v !== null && !Array.isArray(v);
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+/** A size in mm: finite and above zero. */
+const isSize = (v: unknown): v is number => isNum(v) && v > 0;
 const isStr = (v: unknown): v is string => typeof v === 'string';
 const oneOf = <T extends string>(v: unknown, allowed: readonly T[], fallback: T): T =>
   allowed.includes(v as T) ? (v as T) : fallback;
@@ -71,9 +75,9 @@ function parseLayers(raw: unknown): Layer[] {
   const seen = new Set<string>();
   const layers: Layer[] = [];
   for (const l of raw as unknown[]) {
-    if (!isRecord(l) || !isStr(l.id) || !isStr(l.name) || !isNum(l.thicknessMm) || seen.has(l.id)) continue;
+    if (!isRecord(l) || !isStr(l.id) || !isStr(l.name) || seen.has(l.id)) continue;
     seen.add(l.id);
-    layers.push({ id: l.id, name: l.name, thicknessMm: l.thicknessMm });
+    layers.push({ id: l.id, name: l.name, thicknessMm: isSize(l.thicknessMm) ? l.thicknessMm : DEFAULT_LAYER_MM });
   }
   const backing = layers.find((l) => l.id === BACKING_ID) ?? defaultBackingLayer();
   return [backing, ...layers.filter((l) => l.id !== BACKING_ID)];
@@ -85,7 +89,8 @@ function parseRole(raw: unknown, layerIds: Set<string>): ElementRole {
     laser: oneOf(r.laser, ['engrave', 'score', 'cutout'], DEFAULT_ROLE.laser),
     printColor: typeof r.printColor === 'boolean' ? r.printColor : DEFAULT_ROLE.printColor,
     fill: isStr(r.fill) ? r.fill : DEFAULT_ROLE.fill,
-    layerId: isStr(r.layerId) && layerIds.has(r.layerId) ? r.layerId : null,
+    // Null is the one way to say "on the backing".
+    layerId: isStr(r.layerId) && r.layerId !== BACKING_ID && layerIds.has(r.layerId) ? r.layerId : null,
     relief: oneOf(r.relief, ['emboss', 'deboss'], DEFAULT_ROLE.relief),
     reliefMm: isNum(r.reliefMm) ? r.reliefMm : DEFAULT_ROLE.reliefMm,
   };
@@ -105,21 +110,21 @@ function parseTextConfig(raw: unknown): TextConfig | null {
 
 /** One element, or null when its kind is unknown or a field it cannot do without is missing. */
 function parseElement(raw: unknown, layerIds: Set<string>): BadgeElement | null {
-  if (!isRecord(raw) || !isStr(raw.id) || !isNum(raw.x) || !isNum(raw.y) || !isNum(raw.rotationDeg)) return null;
+  if (!isRecord(raw) || !isStr(raw.id) || !isNum(raw.x) || !isNum(raw.y)) return null;
   const base = {
     id: raw.id,
     x: raw.x,
     y: raw.y,
-    rotationDeg: raw.rotationDeg,
+    rotationDeg: isNum(raw.rotationDeg) ? raw.rotationDeg : 0,
     role: parseRole(raw.role, layerIds),
   };
   if (raw.kind === 'text') {
     const text = parseTextConfig(raw.text);
-    if (!text || !isNum(raw.capHeightMm)) return null;
+    if (!text || !isSize(raw.capHeightMm)) return null;
     return { ...base, kind: 'text', name: isStr(raw.name) ? raw.name : 'Text', text, capHeightMm: raw.capHeightMm };
   }
   if (raw.kind === 'graphic') {
-    if (!isStr(raw.dataUrl) || !isNum(raw.widthMm) || !isNum(raw.heightMm)) return null;
+    if (!isStr(raw.dataUrl) || !isSize(raw.widthMm) || !isSize(raw.heightMm)) return null;
     return {
       ...base,
       kind: 'graphic',
@@ -136,7 +141,7 @@ function parseElement(raw: unknown, layerIds: Set<string>): BadgeElement | null 
 /**
  * Reads `.badge` file text. Settings the file lacks take their defaults, and settings of the wrong
  * type, elements of an unknown kind, and elements missing a required field are dropped, so files
- * from older and newer versions both open.
+ * with extra or missing fields open. A file saved by a newer version throws instead.
  */
 export function parseProject(text: string): BadgeProject {
   let raw: unknown;

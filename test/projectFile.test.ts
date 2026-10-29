@@ -57,7 +57,7 @@ describe('projectFile', () => {
       unit: 'mm',
       elements: [
         ...defaultProject().elements,
-        { kind: 'graphic', id: 'g1', name: 'Logo', x: 4, y: -2, rotationDeg: 15, role: { ...role, layerId: 'backing' }, dataUrl: 'data:image/svg+xml;base64,AAAA', vector: true, widthMm: 20, heightMm: 10 },
+        { kind: 'graphic', id: 'g1', name: 'Logo', x: 4, y: -2, rotationDeg: 15, role, dataUrl: 'data:image/svg+xml;base64,AAAA', vector: true, widthMm: 20, heightMm: 10 },
       ],
     };
     expect(parseProject(serializeProject(p))).toEqual(p);
@@ -166,5 +166,30 @@ describe('projectFile', () => {
   it('drops a graphic element without a data URL', () => {
     const p = parse({ elements: [{ kind: 'graphic', id: 'g', name: 'G', x: 0, y: 0, rotationDeg: 0, role, vector: false, widthMm: 1, heightMm: 1 }] });
     expect(p.elements).toHaveLength(0);
+  });
+
+  it('keeps a text element without rotationDeg and turns it to 0', () => {
+    const p = parse({ elements: [textElement({ rotationDeg: undefined })] });
+    expect(p.elements).toHaveLength(1);
+    expect(p.elements[0].rotationDeg).toBe(0);
+  });
+
+  it('drops a text element with a zero cap height', () => {
+    expect(parse({ elements: [textElement({ capHeightMm: 0 })] }).elements).toHaveLength(0);
+  });
+
+  it('drops a graphic element with a non-positive size', () => {
+    const g = { kind: 'graphic', id: 'g', name: 'G', x: 0, y: 0, rotationDeg: 0, role, dataUrl: 'data:,', vector: false, widthMm: 1, heightMm: 1 };
+    expect(parse({ elements: [{ ...g, widthMm: 0 }, { ...g, heightMm: -2 }, g] }).elements).toHaveLength(1);
+  });
+
+  it('gives a layer with a negative thickness 3 mm', () => {
+    const p = parse({ layers: [{ id: 'backing', name: 'MDF', thicknessMm: -1 }, { id: 'a1', name: 'Acrylic', thicknessMm: 0 }] });
+    expect(p.layers.map((l) => l.thicknessMm)).toEqual([3, 3]);
+  });
+
+  it('turns a layerId of backing into null', () => {
+    const p = parse({ elements: [textElement({ role: { ...role, layerId: 'backing' } })] });
+    expect(p.elements[0].role.layerId).toBeNull();
   });
 });
