@@ -118,7 +118,7 @@ describe('FALLBACK_FAMILIES', () => {
 
 describe('without a document', () => {
   it('loadPreviewCss resolves without touching the page', async () => {
-    await expect(loadPreviewCss(['Cinzel'])).resolves.toBeUndefined();
+    await expect(loadPreviewCss([{ family: 'Cinzel', weight: 700, style: 'normal' }])).resolves.toBeUndefined();
   });
 });
 

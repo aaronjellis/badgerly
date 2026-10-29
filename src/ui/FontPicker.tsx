@@ -3,7 +3,8 @@ import { createPortal } from 'react-dom';
 import { Search } from 'lucide-react';
 import type { FontFamily } from '../engine/fontCatalog';
 import { loadPreviewCss } from '../engine/googleFonts';
-import { filterFamilies, pushRecentFont, readRecentFonts } from './fontList';
+import type { PreviewFace } from '../engine/googleFonts';
+import { filterFamilies, previewFace, pushRecentFont, readRecentFonts } from './fontList';
 import type { CategoryFilter } from './fontList';
 import { PHONE_QUERY, useMediaQuery } from './useMediaQuery';
 
@@ -32,17 +33,21 @@ interface FontPickerProps {
   value: string;
   /** The text each tile shows in its face. */
   sampleText: string;
+  /** The text's weight and style: each tile previews its family as near to them as it comes, as the stage draws it. */
+  weight: number;
+  style: 'normal' | 'italic';
   onPick: (family: FontFamily) => void;
   onClose: () => void;
 }
 
 /**
  * A panel over the inspector (a full-screen sheet on a phone) listing every family as a tile that
- * shows the sample text in its own face. A tile's stylesheet is requested only as it nears the view.
+ * shows the sample text in its own face, at the text's weight and style, so a tile looks like the stage
+ * will. A tile's stylesheet is requested only as it nears the view.
  * Picking a tile applies it and keeps the panel open, so you can try several; Done, Escape, or a click
  * outside closes it.
  */
-export const FontPicker: React.FC<FontPickerProps> = ({ catalog, value, sampleText, onPick, onClose }) => {
+export const FontPicker: React.FC<FontPickerProps> = ({ catalog, value, sampleText, weight, style, onPick, onClose }) => {
   const phone = useMediaQuery(PHONE_QUERY);
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<CategoryFilter>('all');
@@ -50,7 +55,7 @@ export const FontPicker: React.FC<FontPickerProps> = ({ catalog, value, sampleTe
   const listRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const observer = useRef<IntersectionObserver | null>(null);
-  const queue = useRef<string[]>([]);
+  const queue = useRef<PreviewFace[]>([]);
   const host = useMemo(() => (phone ? document.body : (document.querySelector<HTMLElement>('.inspector') ?? document.body)), [phone]);
 
   const shown = useMemo(() => (catalog ? filterFamilies(catalog, query, category) : []), [catalog, query, category]);
@@ -59,6 +64,15 @@ export const FontPicker: React.FC<FontPickerProps> = ({ catalog, value, sampleTe
     [catalog, recent]
   );
   const sample = sampleText.trim() || 'Aa';
+  const byName = useMemo(() => new Map((catalog ?? []).map((f) => [f.family, f])), [catalog]);
+  /** The face to load for a family: the text's weight and style as the family has them; its regular face when the catalog doesn't know it. */
+  const faceFor = useCallback(
+    (family: string): PreviewFace => {
+      const f = byName.get(family);
+      return f ? { family, ...previewFace(f, weight, style) } : { family, weight: 400, style: 'normal' };
+    },
+    [byName, weight, style]
+  );
 
   // Tiles that come within the margin ask for their stylesheet, a dozen families to a request.
   const flush = useCallback(() => {
@@ -73,20 +87,20 @@ export const FontPicker: React.FC<FontPickerProps> = ({ catalog, value, sampleTe
           if (!entry.isIntersecting) continue;
           io.unobserve(entry.target);
           const family = (entry.target as HTMLElement).dataset.family;
-          if (family) queue.current.push(family);
+          if (family) queue.current.push(faceFor(family));
         }
         flush();
       },
       { root: list, rootMargin: ROOT_MARGIN }
     );
     observer.current = io;
-    // The first tiles mounted before this observer existed.
+    // The first tiles mounted before this observer existed; a new weight or style watches them all again.
     list.querySelectorAll('.font-tile').forEach((el) => io.observe(el));
     return () => {
       io.disconnect();
       observer.current = null;
     };
-  }, [flush]);
+  }, [flush, faceFor]);
 
   /** Watches a tile until it has asked for its face. */
   const watch = useCallback((el: HTMLElement | null) => {
@@ -95,8 +109,8 @@ export const FontPicker: React.FC<FontPickerProps> = ({ catalog, value, sampleTe
 
   // The chosen and recent families show their faces at once.
   useEffect(() => {
-    void loadPreviewCss([value, ...recent]);
-  }, [value, recent]);
+    void loadPreviewCss([value, ...recent].map(faceFor));
+  }, [value, recent, faceFor]);
 
   // Focus moves in on open and back to where it was on close.
   useEffect(() => {
@@ -124,22 +138,25 @@ export const FontPicker: React.FC<FontPickerProps> = ({ catalog, value, sampleTe
     onPick(f);
   };
 
-  const tile = (f: FontFamily, chip: boolean) => (
-    <button
-      key={f.id}
-      ref={chip ? undefined : watch}
-      type="button"
-      className={`${chip ? 'font-chip' : 'font-tile'} ph-no-capture`}
-      data-family={f.family}
-      aria-pressed={f.family === value}
-      onClick={() => pick(f)}
-    >
-      <span className="font-tile-name">{f.family}</span>
-      <span className="font-tile-sample" style={{ fontFamily: faceOf(f) }}>
-        {sample}
-      </span>
-    </button>
-  );
+  const tile = (f: FontFamily, chip: boolean) => {
+    const face = previewFace(f, weight, style);
+    return (
+      <button
+        key={f.id}
+        ref={chip ? undefined : watch}
+        type="button"
+        className={`${chip ? 'font-chip' : 'font-tile'} ph-no-capture`}
+        data-family={f.family}
+        aria-pressed={f.family === value}
+        onClick={() => pick(f)}
+      >
+        <span className="font-tile-name">{f.family}</span>
+        <span className="font-tile-sample" style={{ fontFamily: faceOf(f), fontWeight: face.weight, fontStyle: face.style }}>
+          {sample}
+        </span>
+      </button>
+    );
+  };
 
   return createPortal(
     <div

@@ -47,7 +47,7 @@ export const TextControls: React.FC<TextControlsProps> = ({ el, unit, family, di
 
       <Field label="Font" group>
         <button type="button" className="btn font-button" aria-haspopup="dialog" onClick={onOpenFonts}>
-          <span className="font-button-name" style={{ fontFamily: `"${text.family.replace(/["\\]/g, '')}", sans-serif` }}>
+          <span className="font-button-name" style={{ fontFamily: `"${text.family.replace(/["\\]/g, '')}", sans-serif`, fontWeight: shownWeight, fontStyle: shownStyle }}>
             {text.family}
           </span>
         </button>

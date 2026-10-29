@@ -11,6 +11,7 @@ import { DEFAULT_TEXT } from '../../engine/textOutline';
 import { Field, Segmented, Switch } from '../Field';
 import { round2 } from '../stageMath';
 import { FontPicker } from '../FontPicker';
+import { previewFace } from '../fontList';
 import { roleLabel } from './elementRole';
 import { readGraphicFile } from './graphicFile';
 import { unitHelpers } from './shared';
@@ -57,10 +58,11 @@ export const ElementsSection: React.FC<SectionProps> = ({ project, dispatch, sel
     };
   }, []);
 
-  // The Font button shows its family in that family.
+  // The Font button shows its family in that family, at the text's weight and style.
+  const face = selected?.kind === 'text' ? { family: selected.text.family, ...(familyEntry ? previewFace(familyEntry, selected.text.weight, selected.text.style) : { weight: 400, style: 'normal' as const }) } : null;
   useEffect(() => {
-    if (family) void loadPreviewCss([family]);
-  }, [family]);
+    if (face) void loadPreviewCss([face]);
+  }, [face?.family, face?.weight, face?.style]);
 
   // A duplicate lands last in the list; select it.
   const count = project.elements.length;
@@ -353,6 +355,8 @@ export const ElementsSection: React.FC<SectionProps> = ({ project, dispatch, sel
           catalog={catalog}
           value={selected.text.family}
           sampleText={selected.text.text.split(/\r?\n/)[0].slice(0, 24)}
+          weight={selected.text.weight}
+          style={selected.text.style}
           onPick={(f) => patch({ text: { ...selected.text, family: f.family } })}
           onClose={() => setPickerOpen(false)}
         />

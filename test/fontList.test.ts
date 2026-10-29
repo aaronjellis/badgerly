@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { FALLBACK_FAMILIES } from '../src/engine/fontCatalog';
-import { RECENT_FONTS_KEY, filterFamilies, pushRecentFont, readRecentFonts } from '../src/ui/fontList';
+import { RECENT_FONTS_KEY, filterFamilies, previewFace, pushRecentFont, readRecentFonts } from '../src/ui/fontList';
 
 function memory(initial: Record<string, string> = {}): Storage {
   const data = new Map(Object.entries(initial));
@@ -45,5 +45,23 @@ describe('recent fonts', () => {
   it('does not throw when storage refuses the write', () => {
     const full = { getItem: () => null, setItem: () => { throw new Error('quota'); } } as unknown as Storage;
     expect(pushRecentFont('Cinzel', full)).toEqual(['Cinzel']);
+  });
+});
+
+describe('previewFace', () => {
+  const bebas = { weights: [400], styles: ['normal' as const] };
+  const playfair = { weights: [400, 500, 600, 700, 800, 900], styles: ['normal' as const, 'italic' as const] };
+
+  it('takes the text weight and style when the family has them', () => {
+    expect(previewFace(playfair, 700, 'italic')).toEqual({ weight: 700, style: 'italic' });
+  });
+
+  it('falls back to the nearest weight and the regular style', () => {
+    expect(previewFace(bebas, 700, 'italic')).toEqual({ weight: 400, style: 'normal' });
+    expect(previewFace(playfair, 650, 'normal')).toEqual({ weight: 700, style: 'normal' });
+  });
+
+  it('keeps the wanted weight when the catalog lists none', () => {
+    expect(previewFace({ weights: [], styles: [] }, 600, 'normal')).toEqual({ weight: 600, style: 'normal' });
   });
 });

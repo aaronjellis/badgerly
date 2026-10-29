@@ -1,5 +1,6 @@
 /** What the font picker lists: the catalog narrowed by a search and a category, and the recently picked families. */
 import type { FontCategory, FontFamily } from '../engine/fontCatalog';
+import { availableStyle, nearestWeight } from '../engine/fontSource';
 
 export type CategoryFilter = FontCategory | 'all';
 
@@ -40,4 +41,9 @@ export function pushRecentFont(family: string, storage: Storage | undefined = de
     // Storage can be full or blocked; the list still works for this session.
   }
   return next;
+}
+
+/** The face a tile previews a family in: the text's weight and style, as near as the family has them. */
+export function previewFace(f: Pick<FontFamily, 'weights' | 'styles'>, weight: number, style: 'normal' | 'italic'): { weight: number; style: 'normal' | 'italic' } {
+  return { weight: nearestWeight(f.weights, weight), style: availableStyle(f.styles, style) };
 }
