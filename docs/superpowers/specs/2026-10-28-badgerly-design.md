@@ -1,14 +1,14 @@
-# Badger design
+# Badgerly design
 
-Badger is a browser tool that makes badges, placards, and nameplates for a laser cutter or a 3D printer. You set a size and shape, add text in any Google Font, add an inset border and graphics, and export a file that goes straight into xTool Studio or a slicer with no cleanup.
+Badgerly is a browser tool that makes badges, placards, and nameplates for a laser cutter or a 3D printer. You set a size and shape, add text in any Google Font, add an inset border and graphics, and export a file that goes straight into xTool Studio or a slicer with no cleanup.
 
-The working name is Badger. The name is easy to change until launch; nothing in this document depends on it.
+The name is Badgerly. The app icon and favicon are a badger face: a simple flat mark drawn as SVG in the app's accent and ink colors, with the two white face stripes doing the recognizing. The same mark sits beside the wordmark in the app bar, replacing Kerfuffle's lucide icon there.
 
 ## Intent
 
 Making a 4 by 2 inch placard today means opening licensed design software, finding a font, drawing the shape, adding strokes, unioning the letters so their strokes don't collide, exporting, importing into xTool Studio, and prepping the cut file. xTool Studio's own unions are awkward, and its offset border around text leaves holes inside letters. For 3D printing it means CAD software with few fonts, poor SVG import, and chamfers and fillets that fail without saying why.
 
-Badger does the geometry that makes those steps hard: unions, offsets, inset strokes, extrusions, and edge treatments. The person only decides what the badge looks like.
+Badgerly does the geometry that makes those steps hard: unions, offsets, inset strokes, extrusions, and edge treatments. The person only decides what the badge looks like.
 
 ## Goals
 
@@ -28,7 +28,7 @@ Badger does the geometry that makes those steps hard: unions, offsets, inset str
 
 ## Anti-goals
 
-These would make Badger a failure even if everything else worked.
+These would make Badgerly a failure even if everything else worked.
 
 - A die-cut border with holes inside letters, or any export that needs a union fixed by hand.
 - Visible stepping on curved edges in a sliced STL.
@@ -45,7 +45,7 @@ These are my calls, made to match Kerfuffle unless noted.
 - **Font pipeline.** Ported from Kerfuffle's in-progress text outline work: `hbFont.ts` (HarfBuzz shaping, so kerning, ligatures, and the contextual joins of script fonts come out as the browser draws them), `fontSource.ts` (each family's real weights and styles and its TTF files from Fontsource, which needs no API key), `textOutline.ts` (glyph outlines laid out per line, flattened to a tolerance, unioned non-zero with Clipper2, simplified), and `textPlacement.ts`. The family list comes from the Fontsource list API filtered to Google families with a Latin subset, giving every family with its category, weights, and styles. Preview rendering uses the Google Fonts CSS API. Kerfuffle's TTF test fixtures keep the tests offline. The port copies the files rather than depending on Kerfuffle, since the two repos deploy on their own.
 - **Geometry.** Everything is computed in millimeters as polygon sets in Clipper2 integer space at 1/1000 mm. Shapes are generated analytically and flattened to a curve tolerance; the preview uses a coarse tolerance and exports use a fine one (0.01 mm). Offsets use round joins so inset strokes stay concentric with rounded corners. Text and SVG graphics become polygon sets through the same pipeline, so every element can be unioned, offset, and clipped the same way.
 - **3D construction.** The model is prismatic (2.5D). The builder constructs every mesh from polygon sets and caps rather than from 3D booleans: the plate is an extrusion of the outline, the edge treatment is a loft between successive inset rings, and emboss and deboss are walls and caps on polygons unioned into or subtracted from the top cap in 2D. This avoids a CSG library and makes every export watertight by construction. STL is binary.
-- **Repo and hosting.** Its own GitHub repository, as Kerfuffle is, served at `labs.aaronjellis.com/<name>` through a labs wrapper folder in the `aaronjellis.com` repo that checks it out as a submodule. The app ships the same `analytics.js` and feedback-widget tags Kerfuffle does, labeled for this app. In scope: the local git repository (initialized with this document), the GitHub remote created with `gh` under the `aaronjellis` account once the name is final, and the labs wrapper folder made from the labs `_template` and `new-project.sh` with `labs.json` marked `draft` until the person removes it. The first deploy is the person's call.
+- **Repo and hosting.** Its own GitHub repository, as Kerfuffle is, served at `labs.aaronjellis.com/badgerly` through a labs wrapper folder in the `aaronjellis.com` repo that checks it out as a submodule. The app ships the same `analytics.js` and feedback-widget tags Kerfuffle does, labeled for this app. In scope: the local git repository (initialized with this document), the GitHub remote `aaronjellis/badgerly` created with `gh`, and the labs wrapper folder made from the labs `_template` and `new-project.sh` with `labs.json` marked `draft` until the person removes it. The first deploy is the person's call.
 - **Units.** A millimeter and inch toggle in the app bar as in Kerfuffle. The default is inches, since badge sizes are usually spoken in inches. The choice is remembered.
 - **Project file.** A `.badge` JSON file with every setting and the uploaded graphics embedded as data URLs, with New, Open, and Save in a Project menu as in Kerfuffle.
 
