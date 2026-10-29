@@ -29,6 +29,7 @@ export function useUndoRemove(project: BadgeProject, dispatch: Dispatch<Action>,
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const removed = lastRemoved.current;
+      if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
       if (!removed || !undoesRemove({ key: e.key, metaKey: e.metaKey, ctrlKey: e.ctrlKey, altKey: e.altKey, shiftKey: e.shiftKey, repeat: e.repeat, target: e.target })) return;
       e.preventDefault();
       lastRemoved.current = null;

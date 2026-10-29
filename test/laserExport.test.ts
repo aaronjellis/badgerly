@@ -263,13 +263,13 @@ describe('inline artwork', () => {
   const box = { x: 0, y: 0, w: 10, h: 10 };
   it('removes javascript: and outside links, scripts, animations, and handlers', () => {
     const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" onload="alert(1)">' +
-      '<a href="javascript:alert(1)"><rect width="5" height="5" onclick="alert(2)"/></a>' +
+      '<a href="javascript:alert(1)"><rect width="5" height="5" onclick="alert(2)"/></a><circle/onmouseover=alert(3) r="2"/>' +
       '<image xlink:href="https://example.com/x.png" width="1" height="1"/><use href="#r"/>' +
       '<script>alert(3)</script><foreignObject><div/></foreignObject>' +
       '<animate attributeName="x" to="5"/><set attributeName="fill" to="red"></set><animateTransform type="rotate"/>' +
       '<rect id="r" style="fill:url(https://example.com/p.svg#g)" width="1" height="1"/></svg>';
     const out = inlineSvgArtwork(svg, 'p-', box, 0)!;
-    expect(out).not.toMatch(/javascript|alert|example\.com|<script|<foreignObject|<animate|<set|onload|onclick/i);
+    expect(out).not.toMatch(/javascript|alert|example\.com|<script|<foreignObject|<animate|<set|onload|onclick|onmouseover/i);
     expect(out).toContain('href="#p-r"');
     expect(out).toContain('<rect width="5" height="5"/>');
   });

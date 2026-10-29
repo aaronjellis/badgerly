@@ -36,7 +36,7 @@ export function sanitize(markup: string): string {
     .replace(new RegExp(`<(${DROPPED})\\b[^>]*?\\/>`, 'gi'), '')
     .replace(new RegExp(`<(${DROPPED})\\b[\\s\\S]*?<\\/\\1\\s*>`, 'gi'), '')
     .replace(new RegExp(`<\\/?(${DROPPED})\\b[^>]*>`, 'gi'), '')
-    .replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+    .replace(/([\s/])on[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, (_m, sep: string) => (sep === '/' ? ' ' : ''))
     .replace(/\s(?:xlink:)?href\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, (attr, quoted: string) => {
       const value = quoted.replace(/^["']|["']$/g, '').trim();
       return value.startsWith('#') || /^data:image\//i.test(value) ? attr : '';
